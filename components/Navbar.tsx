@@ -149,15 +149,6 @@ export default function Navbar() {
                 )}
               </AnimatePresence>
             </motion.button>
-
-            <a
-              href="#tools"
-              onClick={() => setActive("#tools")}
-              className="ml-1 inline-flex items-center rounded-xl px-3 py-2 text-xs transition"
-              style={{ border: "1px solid var(--indigo)", background: "rgba(79,70,229,.10)", color: "var(--halo)" }}
-            >
-              Explorer
-            </a>
           </nav>
 
           {/* Mobile right side */}
@@ -197,9 +188,9 @@ export default function Navbar() {
         <AnimatePresence>
           {open && (
             <motion.div
-              initial={reduce ? false : { height: 0, opacity: 0 }}
-              animate={reduce ? false : { height: "auto", opacity: 1 }}
-              exit={reduce ? false : { height: 0, opacity: 0 }}
+              initial={reduce ? undefined : { height: 0, opacity: 0 }}
+              animate={reduce ? undefined : { height: "auto", opacity: 1 }}
+              exit={reduce ? undefined : { height: 0, opacity: 0 }}
               transition={reduce ? { duration: 0 } : { duration: 0.2, ease: "easeOut" }}
               className="sm:hidden overflow-hidden"
             >
@@ -215,11 +206,6 @@ export default function Navbar() {
                         {item.label}
                       </a>
                     ))}
-                    <a href="#tools" onClick={() => { setActive("#tools"); setOpen(false); }}
-                      className="mt-1 rounded-xl px-3 py-3 text-sm transition"
-                      style={{ border: "1px solid var(--indigo)", background: "rgba(79,70,229,.08)", color: "var(--halo)" }}>
-                      Explorer
-                    </a>
                   </div>
                 </div>
               </div>

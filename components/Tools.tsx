@@ -595,41 +595,124 @@ function ExtractTool() {
 }
 
 /* ── CONVERT IMAGES ─────────────────────────────────────── */
+
+/** Génère un fichier .ico contenant plusieurs tailles (16, 32, 48, 256) */
+async function generateIco(imgElement: HTMLImageElement): Promise<Blob> {
+  const sizes = [16, 32, 48, 256];
+  const pngBuffers: ArrayBuffer[] = [];
+
+  for (const size of sizes) {
+    const c = document.createElement("canvas");
+    c.width = size; c.height = size;
+    const ctx = c.getContext("2d")!;
+    ctx.drawImage(imgElement, 0, 0, size, size);
+    const blob = await new Promise<Blob>((res) => c.toBlob((b) => res(b!), "image/png"));
+    pngBuffers.push(await blob.arrayBuffer());
+  }
+
+  // ICO header
+  const numImages = sizes.length;
+  const headerSize = 6 + numImages * 16;
+  let offset = headerSize;
+  const totalSize = headerSize + pngBuffers.reduce((acc, buf) => acc + buf.byteLength, 0);
+  const buffer = new ArrayBuffer(totalSize);
+  const view = new DataView(buffer);
+
+  // ICONDIR
+  view.setUint16(0, 0, true);  // reserved
+  view.setUint16(2, 1, true);  // type: ICO
+  view.setUint16(4, numImages, true);
+
+  // ICONDIRENTRY for each image
+  pngBuffers.forEach((buf, i) => {
+    const size = sizes[i];
+    const base = 6 + i * 16;
+    view.setUint8(base, size === 256 ? 0 : size);  // width (0 = 256)
+    view.setUint8(base + 1, size === 256 ? 0 : size); // height
+    view.setUint8(base + 2, 0);   // color count
+    view.setUint8(base + 3, 0);   // reserved
+    view.setUint16(base + 4, 1, true);  // color planes
+    view.setUint16(base + 6, 32, true); // bits per pixel
+    view.setUint32(base + 8, buf.byteLength, true); // size of image data
+    view.setUint32(base + 12, offset, true); // offset
+    offset += buf.byteLength;
+  });
+
+  // Image data
+  let dataOffset = headerSize;
+  pngBuffers.forEach((buf) => {
+    new Uint8Array(buffer, dataOffset, buf.byteLength).set(new Uint8Array(buf));
+    dataOffset += buf.byteLength;
+  });
+
+  return new Blob([buffer], { type: "image/x-icon" });
+}
+
 function ConvertTool() {
-  const [fmt, setFmt] = useState<"image/png"|"image/jpeg"|"image/webp">("image/png");
-  const [ext, setExt] = useState("png");
+  const [mode, setMode] = useState<"image/png"|"image/jpeg"|"image/webp"|"ico">("image/png");
   const [quality, setQuality] = useState(90);
   const [files, setFiles] = useState<File[]>([]);
   const [results, setResults] = useState<{url:string;name:string}[]>([]);
   const [status, setStatus] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  const isIco = mode === "ico";
+  const ext = isIco ? "ico" : mode.split("/")[1];
+
   const convert = async () => {
-    if (!files.length||!canvasRef.current) return;
-    const canvas=canvasRef.current; const ctx=canvas.getContext("2d")!; const out:typeof results=[];
+    if (!files.length || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d")!;
+    const out: typeof results = [];
     setStatus("Conversion…");
+
     for (const f of files) {
-      const img=await loadImg(f); canvas.width=img.width; canvas.height=img.height; ctx.drawImage(img,0,0);
-      out.push({ url:canvas.toDataURL(fmt,quality/100), name:f.name.replace(/\.[^.]+$/,"")+"."+ext });
+      const img = await loadImg(f);
+
+      if (isIco) {
+        // Génération ICO multi-tailles
+        const icoBlob = await generateIco(img);
+        const url = URL.createObjectURL(icoBlob);
+        out.push({ url, name: f.name.replace(/\.[^.]+$/, "") + ".ico" });
+      } else {
+        canvas.width = img.width; canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        out.push({ url: canvas.toDataURL(mode, quality / 100), name: f.name.replace(/\.[^.]+$/, "") + "." + ext });
+      }
     }
-    setResults(out); setStatus(`✓ ${out.length} image(s) converties !`);
+    setResults(out);
+    setStatus(`✓ ${out.length} image(s) converties !`);
   };
 
   return (
     <div className="space-y-4">
       <canvas ref={canvasRef} className="hidden" />
-      <div className="flex gap-2">
-        {([["image/png","png","PNG"],["image/jpeg","jpg","JPG"],["image/webp","webp","WebP"]] as const).map(([f,e,l]) => (
-          <ToggleBtn key={f} active={fmt===f} onClick={() => { setFmt(f); setExt(e); }}>{l}</ToggleBtn>
+      <div className="flex gap-2 flex-wrap">
+        {([
+          ["image/png",  "PNG"],
+          ["image/jpeg", "JPG"],
+          ["image/webp", "WebP"],
+          ["ico",        "ICO (Windows)"],
+        ] as const).map(([f, l]) => (
+          <ToggleBtn key={f} active={mode === f} onClick={() => setMode(f)}>{l}</ToggleBtn>
         ))}
       </div>
-      {fmt!=="image/png" && (
+
+      {mode === "image/jpeg" || mode === "image/webp" ? (
         <div>
           <p className="mb-1 text-xs" style={{ color:"var(--muted)" }}>Qualité : {quality}%</p>
           <input type="range" min={10} max={100} value={quality} onChange={(e) => setQuality(+e.target.value)} className="w-full accent-[var(--nebula)]" />
         </div>
+      ) : null}
+
+      {isIco && (
+        <div className="rounded-xl p-3 text-xs" style={{ border:"1px solid var(--stroke)", background:"rgba(108,99,255,.06)", color:"var(--muted)" }}>
+          Génère un fichier <span style={{ color:"var(--halo)" }}>.ico</span> contenant 4 tailles (16×16, 32×32, 48×48, 256×256) — parfait pour icône d'application Windows ou favicon.
+        </div>
       )}
+
       <DropZone accept="image/*" multiple onFiles={(f) => { setFiles(Array.from(f)); setResults([]); setStatus(`${f.length} image(s) chargée(s)`); }} label="🖼 Glisse tes images ici" />
+
       {results.map((r) => (
         <div key={r.name} className="flex items-center gap-3 rounded-xl p-3" style={{ border:"1px solid var(--stroke)", background:"rgba(255,255,255,.02)" }}>
           <span className="flex-1 truncate text-xs" style={{ color:"var(--text)" }}>{r.name}</span>
@@ -953,9 +1036,9 @@ export default function Tools() {
         {active && (
           <motion.div
             key={active}
-            initial={reduce ? false : { opacity: 0, y: 8 }}
-            animate={reduce ? false : { opacity: 1, y: 0 }}
-            exit={reduce ? false : { opacity: 0, y: 8 }}
+            initial={reduce ? undefined : { opacity: 0, y: 8 }}
+            animate={reduce ? undefined : { opacity: 1, y: 0 }}
+            exit={reduce ? undefined : { opacity: 0, y: 8 }}
             transition={{ duration: 0.25 }}
             className="mt-4 rounded-2xl p-6 backdrop-blur"
             style={{ border:"1px solid var(--nebula)", background:"rgba(108,99,255,.04)" }}

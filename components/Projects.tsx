@@ -10,7 +10,7 @@ export default function Projects() {
     <section id="projects" className="py-12 sm:py-16">
       <div className="flex items-end justify-between gap-4">
         <h2 className="text-xl font-semibold sm:text-2xl">Projets</h2>
-        <p className="text-sm text-white/60">En cours de développement</p>
+        <p className="text-sm" style={{ color: "var(--muted)" }}>En cours de développement</p>
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
