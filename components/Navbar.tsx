@@ -1,66 +1,101 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { Sun, Moon } from "lucide-react";
 
 type NavItem = { label: string; href: string };
 
 const NAV: NavItem[] = [
+  { label: "Outils",  href: "#tools" },
   { label: "Projets", href: "#projects" },
-  { label: "Contact", href: "#contact" },
+  //{ label: "Contact", href: "#contact" },
 ];
+
+function NebryonLogo({ size = 32 }: { size?: number }) {
+  const inner = Math.round(size * 0.19);
+  const dot   = Math.round(size * 0.38);
+  return (
+    <motion.div
+      className="relative flex-shrink-0"
+      style={{ width: size, height: size }}
+      animate={{ y: [0, -3, 0] }}
+      transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+    >
+      <span className="absolute inset-0 rounded-full"
+        style={{ border: "1.5px solid var(--nebula)", opacity: 0.7 }} />
+      <span className="absolute rounded-full"
+        style={{ inset: inner, border: "1px solid var(--halo)", opacity: 0.4 }} />
+      <span className="absolute rounded-full"
+        style={{ inset: dot, background: "var(--nebula)" }} />
+      <motion.span
+        className="absolute inset-0 rounded-full"
+        style={{ border: "1.5px solid var(--nebula)" }}
+        animate={{ scale: [1, 1.9], opacity: [0.7, 0] }}
+        transition={{ duration: 2.5, repeat: Infinity, ease: "easeOut" }}
+      />
+    </motion.div>
+  );
+}
 
 export default function Navbar() {
   const reduce = useReducedMotion();
-  const [open, setOpen] = useState(false);
-  const [active, setActive] = useState<string>("#projects");
+  const [open, setOpen]     = useState(false);
+  const [active, setActive] = useState<string>("#tools");
+  const [theme, setTheme]   = useState<"dark" | "light">("dark");
 
-  // ferme le menu si on repasse en desktop
+  // Init theme from localStorage
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 640px)");
-    const onChange = () => setOpen(false);
-    mq.addEventListener?.("change", onChange);
-    return () => mq.removeEventListener?.("change", onChange);
+    const saved = localStorage.getItem("nebryon-theme") as "dark" | "light" | null;
+    if (saved) {
+      setTheme(saved);
+      document.documentElement.setAttribute("data-theme", saved);
+    }
   }, []);
 
-  // option : empêche le scroll de la page quand le menu est ouvert (mobile)
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    localStorage.setItem("nebryon-theme", next);
+    if (next === "light") {
+      document.documentElement.setAttribute("data-theme", "light");
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+    }
+  };
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 640px)");
+    const cb = () => setOpen(false);
+    mq.addEventListener?.("change", cb);
+    return () => mq.removeEventListener?.("change", cb);
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
+    return () => { document.body.style.overflow = prev; };
   }, [open]);
 
-  const Link = ({ item }: { item: NavItem }) => {
+  const NavLink = ({ item }: { item: NavItem }) => {
     const isActive = active === item.href;
-
     return (
       <a
         href={item.href}
-        onClick={() => {
-          setActive(item.href);
-          setOpen(false);
-        }}
-        className="relative px-1 py-2 text-sm text-white/70 hover:text-white transition"
+        onClick={() => { setActive(item.href); setOpen(false); }}
+        className="relative px-1 py-2 text-sm transition"
+        style={{ color: isActive ? "var(--halo)" : "var(--muted)" }}
+        onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
+        onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.color = "var(--muted)"; }}
       >
         <span className="relative z-10">{item.label}</span>
-
-        {/* underline animé */}
         {isActive && (
           <motion.span
             layoutId="nav-underline"
-            className="absolute left-0 right-0 -bottom-0.5 h-px bg-[var(--neon)]"
-            style={{
-              boxShadow: "0 0 18px rgba(21,221,83,.35)",
-            }}
-            transition={
-              reduce
-                ? { duration: 0 }
-                : { type: "spring", stiffness: 500, damping: 40 }
-            }
+            className="absolute left-0 right-0 -bottom-0.5 h-px"
+            style={{ background: "var(--nebula)", boxShadow: "0 0 18px rgba(108,99,255,.5)" }}
+            transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 40 }}
           />
         )}
       </a>
@@ -69,90 +104,96 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-50">
-      <div className="border-b border-white/10 bg-[rgba(6,18,37,.65)] backdrop-blur">
+      <div className="backdrop-blur" style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--stroke)", transition: "background 0.3s ease, border-color 0.3s ease" }}>
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
-          {/* Brand */}
-          <a href="/" className="group flex items-center gap-3">
-            <motion.div
-              className="relative h-10 w-10 overflow-hidden rounded-xl ring-1 ring-white/10 bg-white/[0.03]"
-              whileHover={reduce ? undefined : { rotate: -3, scale: 1.04 }}
-              transition={{ type: "spring", stiffness: 350, damping: 22 }}
-            >
-              {!reduce && (
-                <motion.div
-                  className="pointer-events-none absolute -inset-6"
-                  initial={{ opacity: 0.32, scale: 1 }}
-                  animate={{ opacity: [0.22, 0.52, 0.22], scale: [1, 1.08, 1] }}
-                  transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
-                  style={{
-                    background:
-                      "radial-gradient(circle at 35% 30%, rgba(73,255,138,.22), rgba(0,0,0,0) 60%)",
-                    filter: "blur(14px)",
-                  }}
-                />
-              )}
-              <Image
-                src="/nebryon-mark-transparent-v2.png"
-                alt="Nebryon"
-                fill
-                priority
-                className="object-contain p-2 drop-shadow-[0_0_12px_rgba(0,220,255,.55)] saturate-150"
-              />
-            </motion.div>
 
-            <span className="text-sm font-semibold tracking-wide text-white/90">
-              <span className="text-[var(--neon)] drop-shadow-[0_0_12px_rgba(21,221,83,.25)]">
-                Neb
-              </span>
-              ryon
+          {/* Brand */}
+          <a href="/" className="flex items-center gap-3 no-underline">
+            <NebryonLogo size={32} />
+            <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: "1rem", color: "var(--text)", letterSpacing: ".5px", transition: "color 0.3s ease" }}>
+              <span style={{ color: "var(--nebula)" }}>Nebr</span>yon
             </span>
           </a>
 
           {/* Desktop nav */}
           <nav className="relative hidden items-center gap-5 sm:flex">
-            {NAV.map((item) => (
-              <Link key={item.href} item={item} />
-            ))}
+            {NAV.map((item) => <NavLink key={item.href} item={item} />)}
+
+            {/* Theme toggle */}
+            <motion.button
+              onClick={toggleTheme}
+              className="flex items-center justify-center rounded-xl transition-all"
+              style={{
+                width: 36, height: 36,
+                border: "1px solid var(--stroke)",
+                background: "var(--card-bg)",
+                color: "var(--muted)",
+              }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              title={theme === "dark" ? "Passer en mode clair" : "Passer en mode sombre"}
+            >
+              <AnimatePresence mode="wait">
+                {theme === "dark" ? (
+                  <motion.span key="sun"
+                    initial={{ opacity: 0, rotate: -90 }} animate={{ opacity: 1, rotate: 0 }} exit={{ opacity: 0, rotate: 90 }}
+                    transition={{ duration: 0.2 }}>
+                    <Sun size={15} />
+                  </motion.span>
+                ) : (
+                  <motion.span key="moon"
+                    initial={{ opacity: 0, rotate: 90 }} animate={{ opacity: 1, rotate: 0 }} exit={{ opacity: 0, rotate: -90 }}
+                    transition={{ duration: 0.2 }}>
+                    <Moon size={15} />
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
 
             <a
-              href="#projects"
-              className="ml-2 inline-flex items-center rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/80 hover:bg-white/[0.07] transition"
-              onClick={() => setActive("#projects")}
+              href="#tools"
+              onClick={() => setActive("#tools")}
+              className="ml-1 inline-flex items-center rounded-xl px-3 py-2 text-xs transition"
+              style={{ border: "1px solid var(--indigo)", background: "rgba(79,70,229,.10)", color: "var(--halo)" }}
             >
               Explorer
             </a>
           </nav>
 
-          {/* Mobile button */}
-          <button
-            type="button"
-            aria-label={open ? "Fermer le menu" : "Ouvrir le menu"}
-            aria-expanded={open}
-            onClick={() => setOpen((v) => !v)}
-            className="sm:hidden inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-white/80 hover:bg-white/[0.06] transition"
-          >
-            {/* hamburger minimal -> X */}
-            <span className="relative h-4 w-5">
-              <motion.span
-                className="absolute left-0 top-0 h-px w-full bg-current"
-                animate={open ? { y: 7, rotate: 45 } : { y: 0, rotate: 0 }}
-                transition={reduce ? { duration: 0 } : { duration: 0.18 }}
-              />
-              <motion.span
-                className="absolute left-0 top-1/2 h-px w-full bg-current"
-                animate={open ? { opacity: 0 } : { opacity: 1 }}
-                transition={reduce ? { duration: 0 } : { duration: 0.12 }}
-              />
-              <motion.span
-                className="absolute left-0 bottom-0 h-px w-full bg-current"
-                animate={open ? { y: -7, rotate: -45 } : { y: 0, rotate: 0 }}
-                transition={reduce ? { duration: 0 } : { duration: 0.18 }}
-              />
-            </span>
-          </button>
+          {/* Mobile right side */}
+          <div className="sm:hidden flex items-center gap-2">
+            <motion.button
+              onClick={toggleTheme}
+              className="flex items-center justify-center rounded-xl transition-all"
+              style={{ width: 36, height: 36, border: "1px solid var(--stroke)", background: "var(--card-bg)", color: "var(--muted)" }}
+              whileTap={{ scale: 0.95 }}>
+              {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+            </motion.button>
+
+            <button
+              type="button"
+              aria-label={open ? "Fermer le menu" : "Ouvrir le menu"}
+              aria-expanded={open}
+              onClick={() => setOpen((v) => !v)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl transition"
+              style={{ border: "1px solid var(--stroke)", background: "var(--card-bg)", color: "var(--text)" }}
+            >
+              <span className="relative h-4 w-5">
+                <motion.span className="absolute left-0 top-0 h-px w-full bg-current"
+                  animate={open ? { y: 7, rotate: 45 } : { y: 0, rotate: 0 }}
+                  transition={reduce ? { duration: 0 } : { duration: 0.18 }} />
+                <motion.span className="absolute left-0 top-1/2 h-px w-full bg-current"
+                  animate={open ? { opacity: 0 } : { opacity: 1 }}
+                  transition={reduce ? { duration: 0 } : { duration: 0.12 }} />
+                <motion.span className="absolute left-0 bottom-0 h-px w-full bg-current"
+                  animate={open ? { y: -7, rotate: -45 } : { y: 0, rotate: 0 }}
+                  transition={reduce ? { duration: 0 } : { duration: 0.18 }} />
+              </span>
+            </button>
+          </div>
         </div>
 
-        {/* Mobile menu panel */}
+        {/* Mobile menu */}
         <AnimatePresence>
           {open && (
             <motion.div
@@ -163,29 +204,20 @@ export default function Navbar() {
               className="sm:hidden overflow-hidden"
             >
               <div className="mx-auto w-full max-w-6xl px-5 pb-4 sm:px-8">
-                <div className="mt-2 rounded-2xl border border-white/10 bg-white/[0.03] p-2 backdrop-blur">
+                <div className="mt-2 rounded-2xl p-2 backdrop-blur"
+                  style={{ border: "1px solid var(--stroke)", background: "var(--card-bg)" }}>
                   <div className="flex flex-col">
                     {NAV.map((item) => (
-                      <a
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => {
-                          setActive(item.href);
-                          setOpen(false);
-                        }}
-                        className="rounded-xl px-3 py-3 text-sm text-white/80 hover:bg-white/[0.06] transition"
-                      >
+                      <a key={item.href} href={item.href}
+                        onClick={() => { setActive(item.href); setOpen(false); }}
+                        className="rounded-xl px-3 py-3 text-sm transition"
+                        style={{ color: "var(--text)" }}>
                         {item.label}
                       </a>
                     ))}
-                    <a
-                      href="#projects"
-                      onClick={() => {
-                        setActive("#projects");
-                        setOpen(false);
-                      }}
-                      className="mt-1 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-white/90 hover:bg-white/[0.07] transition"
-                    >
+                    <a href="#tools" onClick={() => { setActive("#tools"); setOpen(false); }}
+                      className="mt-1 rounded-xl px-3 py-3 text-sm transition"
+                      style={{ border: "1px solid var(--indigo)", background: "rgba(79,70,229,.08)", color: "var(--halo)" }}>
                       Explorer
                     </a>
                   </div>

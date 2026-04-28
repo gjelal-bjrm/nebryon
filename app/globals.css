@@ -1,21 +1,65 @@
 @import "tailwindcss";
 
-:root{
-  --bg: #061225;
-  --card: rgba(255,255,255,.06);
-  --stroke: rgba(255,255,255,.12);
-  --text: rgba(255,255,255,.92);
+@theme {
+  --font-family-sans: var(--font-syne), system-ui, -apple-system, sans-serif;
+}
 
-  --neon: #15dd53;
-  --neon2:#49ff8a;
+/* ── DARK (default) ── */
+:root {
+  --cosmos:  #07091A;
+  --surface: #0C0F24;
+  --card:    #111428;
+  --indigo:  #2D1FBF;
+  --nebula:  #6C63FF;
+  --halo:    #A78BFA;
+  --gold:    #D4A84B;
+  --red:     #CF2328;
+
+  --bg:     #07091A;
+  --stroke: #1A1E3A;
+  --text:   #E0DEFF;
+  --muted:  #4A5070;
+
+  --neon:  var(--nebula);
+  --neon2: var(--halo);
+
+  --nav-bg:          #07091Aee;
+  --card-bg:         rgba(255,255,255,.02);
+  --card-hover-bg:   rgba(108,99,255,.06);
+  --card-hover-shadow: 0 0 20px rgba(108,99,255,.12);
+}
+
+/* ── LIGHT — Ardoise Céleste ── */
+:root[data-theme="light"] {
+  --cosmos:  #E8EBF5;
+  --surface: #DDE1F0;
+  --card:    #D0D5E8;
+  --indigo:  #4338CA;
+  --nebula:  #4F46E5;
+  --halo:    #6366F1;
+  --gold:    #B45309;
+  --red:     #DC2626;
+
+  --bg:     #E8EBF5;
+  --stroke: #B0B8D8;
+  --text:   #1E1B4B;
+  --muted:  #5B5EA6;
+
+  --neon:  var(--nebula);
+  --neon2: var(--halo);
+
+  --nav-bg:          #E8EBF5ee;
+  --card-bg:         rgba(255,255,255,.55);
+  --card-hover-bg:   rgba(79,70,229,.07);
+  --card-hover-shadow: 0 0 24px rgba(79,70,229,.12);
 }
 
 html, body { height: 100%; }
 
-body{
+body {
   background: var(--bg);
   color: var(--text);
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, Helvetica, sans-serif;
+  transition: background 0.3s ease, color 0.3s ease;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
