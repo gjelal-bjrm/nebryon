@@ -16,7 +16,7 @@ export const projects: Project[] = [
     type: "showcase",
   },
   {
-    title: "Orbit",
+    title: "Nebryon Orbit",
     description:
       "Client HTTP intégré — teste tes APIs REST directement depuis le navigateur. Collections, environnements avec variables, auth Bearer/Basic/API Key, body JSON et bien plus.",
     href: "/orbit",

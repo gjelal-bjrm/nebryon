@@ -25,7 +25,7 @@ function Counter({ to, suffix }: { to: number; suffix: string }) {
 
 /* ── Stats ───────────────────────────────────────────────── */
 const STATS = [
-  { to: 9,   suffix: "",    label: "outils disponibles" },
+  { to: 12,  suffix: "",    label: "outils disponibles" },
   { to: 100, suffix: " %",  label: "traitement local"   },
   { to: 0,   suffix: "",    label: "donnée transmise"   },
 ];
