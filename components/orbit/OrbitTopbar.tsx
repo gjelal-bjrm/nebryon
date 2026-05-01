@@ -75,7 +75,7 @@ export default function OrbitTopbar({ onOpenProfile }: Props) {
           return (
             <a
               key={item.href}
-              href={item.href}
+              href={item.href.startsWith("#") ? `/${item.href}` : item.href}
               className="px-2.5 py-1 rounded-lg text-xs transition"
               style={isCurrent
                 ? { border: "1px solid var(--nebula)", background: "rgba(108,99,255,.1)", color: "var(--halo)" }
