@@ -140,42 +140,42 @@ function wordDiff(a: string, b: string): { left: WOp[]; right: WOp[] } {
 }
 
 /* ════════════════════════════════════════════════════════════
-   Colors
+   Colors — diff highlights stay fixed; chrome uses CSS vars
 ════════════════════════════════════════════════════════════ */
 
-// Row background (full-width tint on text cell)
+// Row background tints — work in both light and dark
 const BG: Record<Kind, string> = {
   eq:    "transparent",
-  del:   "rgba(210,30,30,.28)",
-  add:   "rgba(30,180,70,.24)",
-  mod:   "transparent",   // overridden per side
-  blank: "rgba(100,100,100,.07)",
+  del:   "rgba(210,30,30,.22)",
+  add:   "rgba(30,180,70,.18)",
+  mod:   "transparent",
+  blank: "rgba(128,128,128,.06)",
 };
-const BG_MOD_L = "rgba(210,30,30,.20)";
-const BG_MOD_R = "rgba(30,180,70,.17)";
+const BG_MOD_L = "rgba(210,30,30,.16)";
+const BG_MOD_R = "rgba(30,180,70,.14)";
 
-// Number-column background
+// Number-column backgrounds — col for diff, theme var for neutral
 const NUM_BG: Record<Kind, string> = {
-  eq:    "rgba(255,255,255,.025)",
-  del:   "rgba(210,30,30,.35)",
-  add:   "rgba(30,180,70,.32)",
-  mod:   "rgba(210,30,30,.28)",   // left side
-  blank: "rgba(100,100,100,.04)",
+  eq:    "var(--surface)",
+  del:   "rgba(210,30,30,.30)",
+  add:   "rgba(30,180,70,.28)",
+  mod:   "rgba(210,30,30,.24)",
+  blank: "var(--surface)",
 };
-const NUM_BG_MOD_R = "rgba(30,180,70,.28)";
+const NUM_BG_MOD_R = "rgba(30,180,70,.24)";
 
-// Number text color
+// Number text colors
 const NUM_COL: Record<Kind, string> = {
-  eq:    "rgba(140,140,160,.55)",
-  del:   "rgba(255,100,100,.90)",
-  add:   "rgba(80,220,100,.90)",
-  mod:   "rgba(255,130,130,.90)",
+  eq:    "var(--muted)",
+  del:   "rgba(220,60,60,.95)",
+  add:   "rgba(30,160,70,.95)",
+  mod:   "rgba(220,60,60,.95)",
   blank: "transparent",
 };
-const NUM_COL_MOD_R = "rgba(80,220,100,.90)";
+const NUM_COL_MOD_R = "rgba(30,160,70,.95)";
 
-// Word highlight
-const WHL = { del:"rgba(220,30,30,.70)", add:"rgba(30,200,70,.65)" };
+// Word highlight (strong enough for both themes)
+const WHL = { del:"rgba(210,30,30,.60)", add:"rgba(20,160,60,.55)" };
 
 // Row height px
 const RH = 21;
@@ -183,10 +183,8 @@ const RH = 21;
 const NW = 52;
 // Centre gutter (arrows) width px
 const GW = 34;
-// Divider color
-const DIV = "rgba(255,255,255,.10)";
-// Equal line opacity
-const EQ_OP = 0.50;
+// Divider / border color — theme-aware
+const DIV = "var(--stroke)";
 
 /* ════════════════════════════════════════════════════════════
    DiffBuilder
@@ -280,17 +278,17 @@ export default function DiffBuilder({ onClose }: { onClose: () => void }) {
   const pill = (on?: boolean): React.CSSProperties => ({
     display:"inline-flex", alignItems:"center", gap:5, cursor:"pointer",
     padding:"3px 10px", borderRadius:6, fontSize:12, fontWeight:500,
-    border:`1px solid ${on ? "rgba(139,92,246,.60)" : "rgba(255,255,255,.10)"}`,
-    background: on ? "rgba(139,92,246,.16)" : "rgba(255,255,255,.04)",
-    color: on ? "#c4b5fd" : "rgba(200,200,210,.75)",
+    border:`1px solid ${on ? "rgba(139,92,246,.60)" : DIV}`,
+    background: on ? "rgba(139,92,246,.16)" : "var(--card)",
+    color: on ? "#c4b5fd" : "var(--muted)",
     userSelect:"none" as const, transition:"all .12s",
   });
   const icon28: React.CSSProperties = {
     display:"inline-flex",alignItems:"center",justifyContent:"center",
     width:28, height:28, borderRadius:6, cursor:"pointer",
-    border:"1px solid rgba(255,255,255,.10)",
-    background:"rgba(255,255,255,.04)",
-    color:"rgba(200,200,210,.75)",
+    border:`1px solid ${DIV}`,
+    background:"var(--card)",
+    color:"var(--muted)",
   };
 
   /* ════════════════════════════════════════════════════════ */
@@ -298,7 +296,8 @@ export default function DiffBuilder({ onClose }: { onClose: () => void }) {
     <div style={{
       position:"fixed", inset:0, zIndex:200,
       display:"flex", flexDirection:"column",
-      background:"#10101a",
+      background:"var(--bg)",
+      color:"var(--text)",
       fontFamily:"system-ui,-apple-system,sans-serif",
       overflow:"hidden",
     }}>
@@ -307,33 +306,34 @@ export default function DiffBuilder({ onClose }: { onClose: () => void }) {
       <div style={{
         display:"flex", alignItems:"center", gap:6, flexShrink:0,
         padding:"7px 12px",
-        borderBottom:"1px solid rgba(255,255,255,.08)",
-        background:"rgba(0,0,0,.35)",
+        borderBottom:`1px solid ${DIV}`,
+        background:"var(--surface)",
       }}>
         <button onClick={onClose} style={icon28}><X size={14}/></button>
-        <span style={{ fontSize:14, fontWeight:700, color:"#eaeaf4", margin:"0 6px 0 2px" }}>Comparateur de texte</span>
+        <span style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 6px 0 2px" }}>Comparateur de texte</span>
 
-        <div style={{ width:1, height:18, background:"rgba(255,255,255,.10)" }}/>
+        <div style={{ width:1, height:18, background:DIV }}/>
 
         <button onClick={()=>setEditMode(false)} style={pill(!editMode)}>Vue diff</button>
         <button onClick={()=>setEditMode(true)}  style={pill(editMode)}>Édition</button>
 
-        <div style={{ width:1, height:18, background:"rgba(255,255,255,.10)" }}/>
+        <div style={{ width:1, height:18, background:DIV }}/>
 
         <button onClick={()=>setIgnoreWS(v=>!v)} style={pill(ignoreWS)}>Ignorer espaces</button>
         <button onClick={()=>setWordLevel(v=>!v)} style={pill(wordLevel)}>Diff mots</button>
         <button onClick={()=>setWrap(v=>!v)} style={pill(wrap)}><WrapText size={12}/>Retour ligne</button>
 
-        <div style={{ width:1, height:18, background:"rgba(255,255,255,.10)" }}/>
+        <div style={{ width:1, height:18, background:DIV }}/>
 
         <button onClick={swap} style={pill()}><ArrowLeftRight size={12}/>Échanger</button>
 
         {totalChunks > 0 && <>
-          <div style={{ width:1, height:18, background:"rgba(255,255,255,.10)" }}/>
+          <div style={{ width:1, height:18, background:DIV }}/>
           <button onClick={()=>goChunk(chunk<=0 ? totalChunks-1 : chunk-1)} style={icon28}><ChevronUp size={14}/></button>
-          <span style={{ fontSize:11, color:"rgba(190,190,210,.70)", minWidth:58, textAlign:"center" }}>
+          <span style={{ fontSize:11, color:"var(--muted)", minWidth:58, textAlign:"center" }}>
             {chunk>=0 ? `${chunk+1} / ${totalChunks}` : `${totalChunks} diff${totalChunks>1?"s":""}`}
           </span>
+
           <button onClick={()=>goChunk(chunk+1)} style={icon28}><ChevronDown size={14}/></button>
         </>}
 
@@ -345,8 +345,8 @@ export default function DiffBuilder({ onClose }: { onClose: () => void }) {
         <div style={{
           display:"flex", alignItems:"center", gap:18, flexShrink:0,
           padding:"3px 16px",
-          borderBottom:"1px solid rgba(255,255,255,.05)",
-          background:"rgba(0,0,0,.20)",
+          borderBottom:`1px solid ${DIV}`,
+          background:"var(--surface)",
           fontSize:11,
         }}>
           {identical
@@ -355,10 +355,10 @@ export default function DiffBuilder({ onClose }: { onClose: () => void }) {
                 {stats.del>0 && <span style={{ color:"#f87171" }}>−{stats.del} suppression{stats.del>1?"s":""}</span>}
                 {stats.add>0 && <span style={{ color:"#4ade80" }}>+{stats.add} ajout{stats.add>1?"s":""}</span>}
                 {stats.mod>0 && <span style={{ color:"#fb923c" }}>~{stats.mod} modification{stats.mod>1?"s":""}</span>}
-                {stats.eq >0 && <span style={{ color:"rgba(155,155,175,.5)" }}>{stats.eq} identique{stats.eq>1?"s":""}</span>}
+                {stats.eq >0 && <span style={{ color:"var(--muted)", opacity:.6 }}>{stats.eq} identique{stats.eq>1?"s":""}</span>}
               </>
           }
-          <span style={{ marginLeft:"auto", color:"rgba(130,130,150,.40)", fontSize:10 }}>{rows.length} lignes</span>
+          <span style={{ marginLeft:"auto", color:"var(--muted)", opacity:.4, fontSize:10 }}>{rows.length} lignes</span>
         </div>
       )}
 
@@ -418,7 +418,7 @@ function DiffView({ rows, wrap, wordLevel, scrollRef,
 
   // Render text content for a cell
   function renderText(text: string, kind: Kind, other: string|null, isLeft: boolean): React.ReactNode {
-    if (kind==="eq") return <span style={{ opacity:EQ_OP }}>{text}</span>;
+    if (kind==="eq") return <span>{text}</span>;
     if (kind==="mod" && wordLevel && other!==null) {
       const { left, right } = wordDiff(isLeft ? text : other, isLeft ? other : text);
       const ops = isLeft ? left : right;
@@ -438,25 +438,25 @@ function DiffView({ rows, wrap, wordLevel, scrollRef,
       {/* ── Sticky panel labels ─────────────────────────── */}
       <div style={{
         display:"flex", flexShrink:0, height:28,
-        borderBottom:"1px solid rgba(255,255,255,.09)",
-        background:"rgba(0,0,0,.28)",
+        borderBottom:`1px solid ${DIV}`,
+        background:"var(--surface)",
         position:"sticky", top:0, zIndex:10,
       }}>
         {/* Left header */}
         <div style={{ width:NW, flexShrink:0 }} />
         <div style={{ flex:1, display:"flex", alignItems:"center", gap:6, padding:"0 10px" }}>
           <PanelBtns onLoad={onLoadL} onEdit={onEditL} onCopy={onCopyL} copied={copiedL} onClear={onClearL} hasContent={hasL}/>
-          <span style={{ fontSize:10, fontWeight:700, letterSpacing:".07em", textTransform:"uppercase", color:"rgba(170,170,190,.55)" }}>
+          <span style={{ fontSize:10, fontWeight:700, letterSpacing:".07em", textTransform:"uppercase", color:"var(--muted)" }}>
             Texte A — original
           </span>
         </div>
         {/* Gutter header */}
-        <div style={{ width:GW, minWidth:GW, flexShrink:0, background:"rgba(0,0,0,.25)", borderLeft:`1px solid ${DIV}`, borderRight:`1px solid ${DIV}` }}/>
+        <div style={{ width:GW, minWidth:GW, flexShrink:0, background:"var(--card)", borderLeft:`1px solid ${DIV}`, borderRight:`1px solid ${DIV}` }}/>
         {/* Right header */}
         <div style={{ width:NW, flexShrink:0 }} />
         <div style={{ flex:1, display:"flex", alignItems:"center", gap:6, padding:"0 10px" }}>
           <PanelBtns onLoad={onLoadR} onEdit={onEditR} onCopy={onCopyR} copied={copiedR} onClear={onClearR} hasContent={hasR}/>
-          <span style={{ fontSize:10, fontWeight:700, letterSpacing:".07em", textTransform:"uppercase", color:"rgba(170,170,190,.55)" }}>
+          <span style={{ fontSize:10, fontWeight:700, letterSpacing:".07em", textTransform:"uppercase", color:"var(--muted)" }}>
             Texte B — modifié
           </span>
         </div>
@@ -486,8 +486,8 @@ function DiffView({ rows, wrap, wordLevel, scrollRef,
             <div key={i} style={{
               display:"flex",
               minHeight: RH,
-              borderTop: isChunkStart ? "1px solid rgba(255,255,255,.07)" : "none",
-              borderBottom: "1px solid rgba(255,255,255,.035)",
+              borderTop: isChunkStart ? `1px solid ${DIV}` : "none",
+              borderBottom: `1px solid ${DIV}`,
             }}>
               {/* ── Left line number ── */}
               <div style={{
@@ -495,7 +495,7 @@ function DiffView({ rows, wrap, wordLevel, scrollRef,
                 display:"flex", alignItems:"center", justifyContent:"flex-end",
                 paddingRight:8,
                 background: lNBg,
-                borderRight:"1px solid rgba(255,255,255,.06)",
+                borderRight:`1px solid ${DIV}`,
                 fontFamily: monoFont, fontSize:11, lineHeight:"1",
                 color: lNC,
                 userSelect:"none",
@@ -513,7 +513,7 @@ function DiffView({ rows, wrap, wordLevel, scrollRef,
                 fontFamily: monoFont, fontSize:12,
                 lineHeight: `${RH}px`,
                 color: row.lKind==="blank" ? "transparent"
-                     : row.lKind==="eq" ? "rgba(200,200,220,.55)" : "#eaeaf4",
+                     : row.lKind==="eq" ? "var(--muted)" : "var(--text)",
                 whiteSpace: wrap ? "pre-wrap" : "pre",
                 overflow: wrap ? "visible" : "hidden",
                 wordBreak: wrap ? "break-all" : "normal",
@@ -529,7 +529,7 @@ function DiffView({ rows, wrap, wordLevel, scrollRef,
                 width:GW, minWidth:GW,
                 display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
                 gap:1,
-                background:"rgba(0,0,0,.25)",
+                background:"var(--card)",
                 borderLeft:`1px solid ${DIV}`, borderRight:`1px solid ${DIV}`,
                 flexShrink:0,
               }}>
@@ -567,7 +567,7 @@ function DiffView({ rows, wrap, wordLevel, scrollRef,
                 display:"flex", alignItems:"center", justifyContent:"flex-end",
                 paddingRight:8,
                 background: rNBg,
-                borderRight:"1px solid rgba(255,255,255,.06)",
+                borderRight:`1px solid ${DIV}`,
                 fontFamily: monoFont, fontSize:11, lineHeight:"1",
                 color: rNC,
                 userSelect:"none",
@@ -585,7 +585,7 @@ function DiffView({ rows, wrap, wordLevel, scrollRef,
                 fontFamily: monoFont, fontSize:12,
                 lineHeight: `${RH}px`,
                 color: row.rKind==="blank" ? "transparent"
-                     : row.rKind==="eq" ? "rgba(200,200,220,.55)" : "#eaeaf4",
+                     : row.rKind==="eq" ? "var(--muted)" : "var(--text)",
                 whiteSpace: wrap ? "pre-wrap" : "pre",
                 overflow: wrap ? "visible" : "hidden",
                 wordBreak: wrap ? "break-all" : "normal",
@@ -626,7 +626,7 @@ function EditMode({ leftText, setLeft, rightText, setRight,
         value={leftText} onChange={setLeft}
         onLoad={onLoadL} onCopy={onCopyL} copied={copiedL} onClear={()=>setLeft("")}
       />
-      <div style={{ width:1, background:"rgba(255,255,255,.08)", flexShrink:0 }}/>
+      <div style={{ width:1, background:DIV, flexShrink:0 }}/>
       <NumberedPane
         label="Texte B — modifié"
         value={rightText} onChange={setRight}
@@ -662,9 +662,9 @@ function NumberedPane({ label, value, onChange, onLoad, onCopy, copied, onClear 
   const sm: React.CSSProperties = {
     display:"inline-flex",alignItems:"center",justifyContent:"center",
     width:24, height:24, borderRadius:5, cursor:"pointer",
-    border:"1px solid rgba(255,255,255,.09)",
-    background:"rgba(255,255,255,.04)",
-    color:"rgba(190,190,215,.75)",
+    border:`1px solid ${DIV}`,
+    background:"var(--card)",
+    color:"var(--muted)",
   };
 
   return (
@@ -673,10 +673,10 @@ function NumberedPane({ label, value, onChange, onLoad, onCopy, copied, onClear 
       <div style={{
         display:"flex", alignItems:"center", gap:6,
         padding:"5px 10px", flexShrink:0,
-        borderBottom:"1px solid rgba(255,255,255,.07)",
-        background:"rgba(0,0,0,.25)",
+        borderBottom:`1px solid ${DIV}`,
+        background:"var(--surface)",
       }}>
-        <span style={{ flex:1, fontSize:10, fontWeight:700, letterSpacing:".07em", textTransform:"uppercase", color:"rgba(170,170,190,.55)" }}>
+        <span style={{ flex:1, fontSize:10, fontWeight:700, letterSpacing:".07em", textTransform:"uppercase", color:"var(--muted)" }}>
           {label}
         </span>
         <button onClick={onLoad} style={sm} title="Importer un fichier"><Upload size={11}/></button>
@@ -698,12 +698,12 @@ function NumberedPane({ label, value, onChange, onLoad, onCopy, copied, onClear 
             width: 52, minWidth:52,
             overflowY:"hidden",   // hidden — synced via JS
             overflowX:"hidden",
-            background:"rgba(0,0,0,.30)",
-            borderRight:"1px solid rgba(255,255,255,.07)",
+            background:"var(--card)",
+            borderRight:`1px solid ${DIV}`,
             fontFamily: monoFont,
             fontSize:12,
             lineHeight:`${lineH}px`,
-            color:"rgba(130,140,160,.55)",
+            color:"var(--muted)",
             textAlign:"right",
             userSelect:"none",
             paddingTop: 10,
@@ -730,8 +730,8 @@ function NumberedPane({ label, value, onChange, onLoad, onCopy, copied, onClear 
             resize:"none",
             outline:"none",
             border:"none",
-            background:"rgba(255,255,255,.015)",
-            color:"#d4d4e8",
+            background:"var(--bg)",
+            color:"var(--text)",
             fontFamily: monoFont,
             fontSize:12,
             lineHeight:`${lineH}px`,
@@ -758,9 +758,9 @@ function PanelBtns({ onLoad, onEdit, onCopy, copied, onClear, hasContent }: {
   const s: React.CSSProperties = {
     display:"inline-flex",alignItems:"center",justifyContent:"center",
     width:20, height:20, borderRadius:4, cursor:"pointer",
-    border:"1px solid rgba(255,255,255,.09)",
-    background:"rgba(255,255,255,.04)",
-    color:"rgba(180,180,210,.70)",
+    border:`1px solid ${DIV}`,
+    background:"var(--card)",
+    color:"var(--muted)",
   };
   return (
     <div style={{ display:"flex", gap:3 }}>
@@ -790,12 +790,12 @@ function EmptyState({ onEdit, onLoadL, onLoadR }: {
 }) {
   return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:20 }}>
-      <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="rgba(180,180,220,.18)" strokeWidth="1.2">
+      <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="1.2">
         <path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"/>
         <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
         <line x1="12" y1="3" x2="12" y2="21"/>
       </svg>
-      <p style={{ fontSize:13, color:"rgba(175,175,200,.45)", textAlign:"center", maxWidth:300, lineHeight:1.6 }}>
+      <p style={{ fontSize:13, color:"var(--muted)", opacity:.65, textAlign:"center", maxWidth:300, lineHeight:1.6 }}>
         Importe ou colle deux textes pour visualiser les différences
       </p>
       <div style={{ display:"flex", gap:10 }}>
@@ -805,12 +805,12 @@ function EmptyState({ onEdit, onLoadL, onLoadR }: {
         }}>Saisir du texte</button>
         <button onClick={onLoadL} style={{
           padding:"8px 14px", borderRadius:8, fontSize:12, fontWeight:500, cursor:"pointer",
-          border:"1px solid rgba(255,255,255,.12)", background:"rgba(255,255,255,.05)", color:"rgba(190,190,215,.80)",
+          border:`1px solid ${DIV}`, background:"var(--card)", color:"var(--muted)",
           display:"flex", alignItems:"center", gap:6,
         }}><Upload size={12}/>Fichier A</button>
         <button onClick={onLoadR} style={{
           padding:"8px 14px", borderRadius:8, fontSize:12, fontWeight:500, cursor:"pointer",
-          border:"1px solid rgba(255,255,255,.12)", background:"rgba(255,255,255,.05)", color:"rgba(190,190,215,.80)",
+          border:`1px solid ${DIV}`, background:"var(--card)", color:"var(--muted)",
           display:"flex", alignItems:"center", gap:6,
         }}><Upload size={12}/>Fichier B</button>
       </div>
