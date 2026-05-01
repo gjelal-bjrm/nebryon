@@ -126,9 +126,8 @@ export default function WelcomeSetup() {
               <ShieldCheck size={15} className="flex-shrink-0 mt-0.5" style={{ color: "#2DD4BF" }} />
               <p className="text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
                 <span className="font-semibold" style={{ color: "#2DD4BF" }}>100 % local.</span>{" "}
-                Toutes tes informations sont stockées uniquement sur cet appareil (IndexedDB).
-                Rien n'est transmis ni partagé. Ces champs sont facultatifs — ils servent uniquement
-                à personnaliser l'interface.
+                Toutes tes informations restent sur cet appareil — rien n'est transmis ni partagé.
+                Ces champs sont entièrement facultatifs et servent uniquement à personnaliser ton expérience.
               </p>
             </div>
 
