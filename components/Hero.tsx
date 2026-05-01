@@ -1,12 +1,13 @@
 "use client";
 import { motion, useReducedMotion } from "framer-motion";
 import { Sparkles } from "lucide-react";
+import HeroDemos from "@/components/HeroDemos";
 
 export default function Hero() {
   const reduce = useReducedMotion();
 
   return (
-    <section className="pt-32 pb-20 text-center max-w-3xl mx-auto">
+    <section className="pt-32 pb-16 text-center max-w-3xl mx-auto">
 
       {/* Badge */}
       <motion.div
@@ -26,41 +27,14 @@ export default function Hero() {
         NEBRYON HUB
       </motion.div>
 
-      {/* Titre */}
-      <motion.h1
-        initial={reduce ? undefined : { opacity: 0, y: 12 }}
-        animate={reduce ? undefined : { opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.1 }}
-        className="text-5xl sm:text-6xl lg:text-7xl font-extrabold leading-tight mb-6"
-        style={{ fontFamily: "'Syne', sans-serif" }}
-      >
-        Des outils pensés<br />
-        pour{" "}
-        <span style={{
-          background: "linear-gradient(120deg, var(--nebula), var(--halo))",
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-        }}>
-          tout le monde
-        </span>
-      </motion.h1>
-
-      {/* Sous-titre */}
-      <motion.p
-        initial={reduce ? undefined : { opacity: 0, y: 8 }}
-        animate={reduce ? undefined : { opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-        className="text-sm sm:text-base leading-relaxed mb-10 mx-auto max-w-lg"
-        style={{ color: "var(--muted)", fontFamily: "'Syne', sans-serif" }}
-      >
-        Un espace centralisé pour simplifier ton quotidien — manipulation de fichiers, calculs, générateurs et bien plus. Tout fonctionne en local, rien n'est envoyé sur un serveur.
-      </motion.p>
+      {/* Démos animées */}
+      <HeroDemos />
 
       {/* Boutons */}
       <motion.div
         initial={reduce ? undefined : { opacity: 0, y: 8 }}
         animate={reduce ? undefined : { opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.3 }}
+        transition={{ duration: 0.6, delay: 0.35 }}
         className="flex gap-3 justify-center flex-wrap"
       >
         <a
