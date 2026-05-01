@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Sun, Moon, User, Home } from "lucide-react";
+import { Sun, Moon, User } from "lucide-react";
 import { db } from "@/lib/orbit/db";
+import OrbitLogo from "./OrbitLogo";
 
 interface Props {
   onOpenProfile: () => void;
@@ -43,14 +44,21 @@ export default function OrbitTopbar({ onOpenProfile }: Props) {
       <div className="flex items-center gap-2">
         <a
           href="/"
-          className="flex items-center justify-center w-6 h-6 rounded-md transition hover:opacity-70"
-          style={{ color: "var(--muted)" }}
+          className="flex items-center justify-center transition hover:opacity-80"
           title="Retour à l'accueil"
         >
-          <Home size={13} />
+          <OrbitLogo size={26} />
         </a>
-        <span className="text-xs font-bold tracking-wide" style={{ color: "var(--nebula)" }}>
-          Orbit
+        <span
+          className="text-xs font-bold tracking-widest select-none"
+          style={{
+            background: "linear-gradient(90deg, #3B9EFF 0%, #6C63FF 48%, #2DD4BF 100%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text",
+          }}
+        >
+          ORBIT
         </span>
       </div>
 
