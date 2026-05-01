@@ -110,7 +110,10 @@ export async function runRequest(
 
   if (!proxyRes.ok) {
     const err = await proxyRes.json().catch(() => ({ error: `Proxy error ${proxyRes.status}` }));
-    throw new Error(err.error ?? `Proxy error ${proxyRes.status}`);
+    const msg = err.error ?? `Proxy error ${proxyRes.status}`;
+    // Log so the user can read the real error in the browser console
+    console.error("[Orbit] Proxy returned", proxyRes.status, "—", msg);
+    throw new Error(msg);
   }
 
   const data = await proxyRes.json();
