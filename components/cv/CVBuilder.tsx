@@ -80,7 +80,7 @@ function AddBtn({ onClick, label }: { onClick: () => void; label: string }) {
 
 function DeleteBtn({ onClick }: { onClick: () => void }) {
   return (
-    <button onClick={onClick}
+    <button onClick={(e) => { e.stopPropagation(); onClick(); }}
       className="flex-shrink-0 rounded-lg p-1.5 transition hover:opacity-80"
       style={{ color: "#CF2328", border: "1px solid rgba(207,35,40,.3)" }}>
       <Trash2 size={11} />
@@ -103,7 +103,7 @@ function Card({ title, subtitle, onDelete, children }: {
           <p className="text-xs font-semibold truncate" style={{ color: "var(--text)" }}>{title || "(sans titre)"}</p>
           {subtitle && <p className="text-[10px] truncate" style={{ color: "var(--muted)" }}>{subtitle}</p>}
         </div>
-        <DeleteBtn onClick={(e: any) => { e.stopPropagation(); onDelete(); }} />
+        <DeleteBtn onClick={onDelete} />
       </div>
       {open && <div className="px-4 py-4 space-y-3">{children}</div>}
     </div>
