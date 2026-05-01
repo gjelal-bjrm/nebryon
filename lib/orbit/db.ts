@@ -3,9 +3,10 @@ import type { Collection, SavedRequest, Environment, Profile, OrbitBackup } from
 
 class OrbitDB extends Dexie {
   collections!: Table<Collection>;
-  requests!: Table<SavedRequest>;
+  requests!:    Table<SavedRequest>;
   environments!: Table<Environment>;
-  profile!: Table<Profile>;
+  profile!:     Table<Profile>;
+  settings!:    Table<{ id: string; value: unknown }>;
 
   constructor() {
     super("nebryon-orbit");
@@ -25,12 +26,35 @@ class OrbitDB extends Dexie {
       environments: "id, name, isActive, createdAt",
       profile:      "id",
     });
+    this.version(4).stores({
+      collections:  "id, name, createdAt",
+      requests:     "id, collectionId, name, createdAt",
+      environments: "id, name, isActive, createdAt",
+      profile:      "id",
+      settings:     "id",
+    });
   }
 }
 
 export const db = new OrbitDB();
 
-/* ── Backup helpers ──────────────────────────────────────── */
+/* ── Backup dir handle (File System Access API) ──────────── */
+export async function getBackupDirHandle(): Promise<FileSystemDirectoryHandle | null> {
+  try {
+    const row = await db.settings.get("backupDirHandle");
+    return (row?.value as FileSystemDirectoryHandle) ?? null;
+  } catch { return null; }
+}
+
+export async function setBackupDirHandle(handle: FileSystemDirectoryHandle | null): Promise<void> {
+  if (handle) {
+    await db.settings.put({ id: "backupDirHandle", value: handle });
+  } else {
+    await db.settings.delete("backupDirHandle");
+  }
+}
+
+/* ── JSON backup helpers ─────────────────────────────────── */
 export async function exportBackup(): Promise<string> {
   const [collections, requests, environments, profileArr] = await Promise.all([
     db.collections.toArray(),
@@ -53,10 +77,8 @@ export async function importBackup(json: string): Promise<void> {
   const backup = JSON.parse(json) as OrbitBackup;
   await db.transaction("rw", db.collections, db.requests, db.environments, db.profile, async () => {
     await Promise.all([
-      db.collections.clear(),
-      db.requests.clear(),
-      db.environments.clear(),
-      db.profile.clear(),
+      db.collections.clear(), db.requests.clear(),
+      db.environments.clear(), db.profile.clear(),
     ]);
     await Promise.all([
       backup.collections?.length  ? db.collections.bulkAdd(backup.collections)   : Promise.resolve(),

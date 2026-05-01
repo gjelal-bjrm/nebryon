@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useAutoBackup } from "@/hooks/useAutoBackup";
+import { writeBackup, isElectron } from "@/lib/orbit/autobackup";
 import { useLiveQuery } from "dexie-react-hooks";
 import dynamic from "next/dynamic";
 import RequestPanel from "@/components/orbit/RequestPanel";
@@ -21,6 +23,18 @@ export default function OrbitPage() {
   const [response, setResponse] = useState<OrbitResponse | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useAutoBackup();
+
+  // Electron: backup on app quit then signal main to proceed
+  useEffect(() => {
+    if (!isElectron()) return;
+    const handler = async () => {
+      try { await writeBackup(); } catch { /* silent */ }
+      window.electronAPI!.quitReady();
+    };
+    window.electronAPI!.onBeforeQuit(handler);
+  }, []);
 
   const [activeEnvId, setActiveEnvId] = useState<string | null>(null);
   const [showEnvEditor,    setShowEnvEditor]    = useState(false);
