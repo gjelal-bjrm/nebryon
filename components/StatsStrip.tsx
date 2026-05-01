@@ -25,7 +25,7 @@ function Counter({ to, suffix }: { to: number; suffix: string }) {
 
 /* ── Stats ───────────────────────────────────────────────── */
 const STATS = [
-  { to: 12,  suffix: "",    label: "outils disponibles" },
+  { to: 14,  suffix: "",    label: "outils disponibles" },
   { to: 100, suffix: " %",  label: "traitement local"   },
   { to: 0,   suffix: "",    label: "donnée transmise"   },
 ];
@@ -34,7 +34,7 @@ const STATS = [
 const PILLS = [
   "Image Resizer", "Fusionner PDF", "QR Code", "Mots de passe",
   "Extraire pages", "Convertir images", "Calculateur dates",
-  "Image → Base64", "Inspecteur fichier",
+  "Base64", "Inspecteur fichier", "Horloge", "Comparateur texte", "Lorem Ipsum",
 ];
 
 export default function StatsStrip() {
