@@ -39,11 +39,11 @@ const TOOLS: Tool[] = [
   { id: "convert",  icon: <RefreshCw size={18} />,      title: "Convertir des images",       desc: "PNG · JPG · WebP avec qualité ajustable.",                                            badge: "Image" },
   { id: "qrcode",   icon: <QrCode size={18} />,         title: "Générateur QR Code",         desc: "Crée un QR code stylisé avec titre et cadre coloré. Téléchargeable en PNG.",          badge: "Quotidien" },
   { id: "password", icon: <KeyRound size={18} />,       title: "Mots de passe",              desc: "Génère des mots de passe sécurisés avec options de complexité.",                      badge: "Sécurité" },
-  //{ id: "tva",      icon: <Receipt size={18} />,        title: "Calculateur TVA",            desc: "Calcule HT ↔ TTC selon le taux de ton pays (CH, FR, BE…).",                          badge: "Finance" },
   { id: "date",     icon: <CalendarDays size={18} />,   title: "Calculateur de dates",       desc: "Différence entre dates, ajouter des jours, calculer l'âge.",                         badge: "Quotidien" },
-  //{ id: "units",    icon: <Ruler size={18} />,          title: "Convertisseur d'unités",     desc: "Longueur, masse, température, surface — km/miles, kg/lbs, °C/°F…",                   badge: "Quotidien" },
   { id: "base64",   icon: <Code2 size={18} />,          title: "Image → Base64",             desc: "Encode une image en Base64 pour HTML / CSS / JSON.",                                  badge: "Dev" },
   { id: "meta",     icon: <ScanSearch size={18} />,     title: "Inspecteur de fichier",      desc: "Dimensions, taille, format, ratio d'une image ou d'un PDF.",                         badge: "Dev" },
+  { id: "tva",      icon: <Receipt size={18} />,        title: "Calculateur TVA",            desc: "Calcule HT ↔ TTC selon le taux de ton pays (CH, FR, BE…).",                          badge: "Finance" },
+  { id: "units",    icon: <Ruler size={18} />,          title: "Convertisseur d'unités",     desc: "Longueur, masse, température, surface — km/miles, kg/lbs, °C/°F…",                   badge: "Quotidien" },
 ];
 
 /* ── Helpers ────────────────────────────────────────────── */
