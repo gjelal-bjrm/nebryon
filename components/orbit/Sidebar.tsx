@@ -41,24 +41,40 @@ export default function Sidebar({ onLoadRequest, activeEnvId, onEnvChange, onOpe
 
   const deleteRequest = (id: string) => db.requests.delete(id);
 
-  const handlePostmanImport = async (files: FileList | null) => {
+  const handleImport = async (files: FileList | null) => {
     if (!files?.[0]) return;
     setImporting(true);
     try {
       const text = await files[0].text();
-      const groups = parsePostmanCollection(text);
+      const json = JSON.parse(text);
       const now = Date.now();
       const newIds: string[] = [];
-      for (let i = 0; i < groups.length; i++) {
-        const { collectionName, requests } = groups[i];
-        const colId = crypto.randomUUID();
-        await db.collections.add({ id: colId, name: collectionName, createdAt: now + i });
-        await db.requests.bulkAdd(requests.map((r) => ({ ...r, id: crypto.randomUUID(), collectionId: colId })));
-        newIds.push(colId);
+
+      if (json?.version === 2 && Array.isArray(json.collections)) {
+        // ── Orbit backup format ──────────────────────────────
+        for (let i = 0; i < json.collections.length; i++) {
+          const col = json.collections[i];
+          const colId = crypto.randomUUID();
+          await db.collections.add({ ...col, id: colId, createdAt: now + i });
+          const reqs = (json.requests as SavedRequest[]).filter((r) => r.collectionId === col.id);
+          await db.requests.bulkAdd(reqs.map((r) => ({ ...r, id: crypto.randomUUID(), collectionId: colId })));
+          newIds.push(colId);
+        }
+      } else {
+        // ── Postman format ───────────────────────────────────
+        const groups = parsePostmanCollection(text);
+        for (let i = 0; i < groups.length; i++) {
+          const { collectionName, requests } = groups[i];
+          const colId = crypto.randomUUID();
+          await db.collections.add({ id: colId, name: collectionName, createdAt: now + i });
+          await db.requests.bulkAdd(requests.map((r) => ({ ...r, id: crypto.randomUUID(), collectionId: colId })));
+          newIds.push(colId);
+        }
       }
+
       setOpenCols((s) => { const n = new Set(s); newIds.forEach((id) => n.add(id)); return n; });
     } catch (e) {
-      console.error("Postman import failed", e);
+      console.error("Import failed", e);
     } finally {
       setImporting(false);
       if (importRef.current) importRef.current.value = "";
@@ -78,7 +94,7 @@ export default function Sidebar({ onLoadRequest, activeEnvId, onEnvChange, onOpe
               onClick={() => importRef.current?.click()}
               className="transition hover:opacity-80"
               style={{ color: "var(--muted)" }}
-              title={importing ? "Import en cours…" : "Importer une collection Postman"}
+              title={importing ? "Import en cours…" : "Importer une collection"}
             >
               <Upload size={13} />
             </button>
@@ -87,7 +103,7 @@ export default function Sidebar({ onLoadRequest, activeEnvId, onEnvChange, onOpe
             </button>
           </div>
         </div>
-        <input ref={importRef} type="file" accept=".json" className="hidden" onChange={(e) => handlePostmanImport(e.target.files)} />
+        <input ref={importRef} type="file" accept=".json" className="hidden" onChange={(e) => handleImport(e.target.files)} />
 
         {addingCol && (
           <form onSubmit={(e) => { e.preventDefault(); createCollection(); }} className="mb-2 flex gap-1">
