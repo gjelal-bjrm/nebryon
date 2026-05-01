@@ -231,12 +231,10 @@ function PreviewPane({ data, triggerKey }: { data: CVData; triggerKey: number })
             <p className="text-[10px] font-mono" style={{ color: "var(--muted)" }}>{error.message}</p>
           </div>
         );
-        return (
-          {url && (
-            <iframe src={url} className="w-full h-full"
-              style={{ border: "none", background: "#fff" }} title="Aperçu CV" />
-          )}
-        );
+        return url ? (
+          <iframe src={url} className="w-full h-full"
+            style={{ border: "none", background: "#fff" }} title="Aperçu CV" />
+        ) : null;
       }}
     </BlobProvider>
   );
@@ -292,8 +290,10 @@ function PreviewPopup({ data, onClose, fileName }: {
                 <p className="text-[10px] font-mono" style={{ color: "var(--muted)" }}>{error.message}</p>
               </div>
             );
-            return <iframe src={url ?? ""} className="w-full h-full"
-              style={{ border: "none", background: "#fff" }} title="Aperçu CV plein écran" />;
+            return url ? (
+              <iframe src={url} className="w-full h-full"
+                style={{ border: "none", background: "#fff" }} title="Aperçu CV plein écran" />
+            ) : null;
           }}
         </BlobProvider>
       </div>
