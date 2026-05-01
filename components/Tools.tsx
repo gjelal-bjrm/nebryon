@@ -34,7 +34,8 @@ import {
   ScrollText,
 } from "lucide-react";
 
-const CVBuilder = dynamic(() => import("./cv/CVBuilder"), { ssr: false });
+const CVBuilder   = dynamic(() => import("./cv/CVBuilder"),   { ssr: false });
+const DiffBuilder = dynamic(() => import("./diff/DiffBuilder"), { ssr: false });
 
 /* ── Types ─────────────────────────────────────────────── */
 type ToolId = "resize" | "merge" | "extract" | "convert" | "password" | "tva" | "date" | "units" | "base64" | "meta" | "qrcode" | "clock" | "diff" | "lorem" | "cv";
@@ -1292,197 +1293,27 @@ function MetaTool() {
 
 /* ── TEXT DIFF ──────────────────────────────────────────── */
 
-type DiffItem<T> = { type: "eq" | "add" | "del"; val: T };
-
-function diffSeq<T>(a: T[], b: T[]): DiffItem<T>[] {
-  const m = a.length, n = b.length;
-  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-  for (let i = 1; i <= m; i++)
-    for (let j = 1; j <= n; j++)
-      dp[i][j] = (a[i-1] as unknown) === (b[j-1] as unknown)
-        ? dp[i-1][j-1] + 1
-        : Math.max(dp[i-1][j], dp[i][j-1]);
-  const res: DiffItem<T>[] = [];
-  let i = m, j = n;
-  while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && (a[i-1] as unknown) === (b[j-1] as unknown)) {
-      res.unshift({ type: "eq",  val: a[i-1] }); i--; j--;
-    } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
-      res.unshift({ type: "add", val: b[j-1] }); j--;
-    } else {
-      res.unshift({ type: "del", val: a[i-1] }); i--;
-    }
-  }
-  return res;
-}
-
-function WordDiffPair({ delLine, addLine }: { delLine: string; addLine: string }) {
-  const dw = diffSeq(delLine.split(/(\s+)/), addLine.split(/(\s+)/));
+function DiffTool() {
+  const [open, setOpen] = useState(false);
   return (
     <>
-      <div className="flex py-0.5 px-3" style={{ background: "rgba(207,35,40,.08)", borderBottom: "1px solid rgba(255,255,255,.03)" }}>
-        <span className="w-4 text-[10px] select-none mr-3 flex-shrink-0 font-mono" style={{ color: "#CF2328", opacity: .7 }}>-</span>
-        <span className="font-mono text-xs whitespace-pre-wrap break-all flex-1">
-          {dw.filter(d => d.type !== "add").map((d, i) => (
-            <span key={i} style={d.type === "del"
-              ? { background: "rgba(207,35,40,.4)", color: "#fca5a5", borderRadius: "2px" }
-              : { color: "var(--muted)" }}>
-              {d.val}
-            </span>
-          ))}
-        </span>
+      <div className="flex flex-col items-center justify-center gap-4 py-8">
+        <p className="text-sm text-center max-w-xs" style={{ color: "var(--muted)" }}>
+          Comparez deux textes côte à côte avec numéros de lignes, diff mot par mot et navigation entre les différences.
+        </p>
+        <button
+          onClick={() => setOpen(true)}
+          className="rounded-xl px-5 py-2.5 text-sm font-semibold transition"
+          style={{ background: "var(--nebula)", color: "#fff" }}
+        >
+          Ouvrir le comparateur
+        </button>
       </div>
-      <div className="flex py-0.5 px-3" style={{ background: "rgba(34,197,94,.08)", borderBottom: "1px solid rgba(255,255,255,.03)" }}>
-        <span className="w-4 text-[10px] select-none mr-3 flex-shrink-0 font-mono" style={{ color: "#22c55e", opacity: .7 }}>+</span>
-        <span className="font-mono text-xs whitespace-pre-wrap break-all flex-1">
-          {dw.filter(d => d.type !== "del").map((d, i) => (
-            <span key={i} style={d.type === "add"
-              ? { background: "rgba(34,197,94,.35)", color: "#86efac", borderRadius: "2px" }
-              : { color: "var(--muted)" }}>
-              {d.val}
-            </span>
-          ))}
-        </span>
-      </div>
+      {open && <DiffBuilder onClose={() => setOpen(false)} />}
     </>
   );
 }
 
-function DiffTool() {
-  const [left,  setLeft]  = useState("");
-  const [right, setRight] = useState("");
-  const [mode,  setMode]  = useState<"lines" | "words">("lines");
-
-  const lineDiff = useMemo(() => {
-    if (!left && !right) return [];
-    return diffSeq(left.split("\n"), right.split("\n"));
-  }, [left, right]);
-
-  const stats = useMemo(() => {
-    let add = 0, del = 0, eq = 0;
-    for (const d of lineDiff) {
-      if (d.type === "add") add++;
-      else if (d.type === "del") del++;
-      else eq++;
-    }
-    return { add, del, eq };
-  }, [lineDiff]);
-
-  const inputSty = {
-    border: "1px solid var(--stroke)",
-    background: "rgba(255,255,255,.03)",
-    color: "var(--text)",
-    resize: "vertical" as const,
-  };
-
-  const hasDiff  = left || right;
-  const identical = hasDiff && stats.add === 0 && stats.del === 0;
-
-  return (
-    <div className="space-y-4">
-      {/* Mode */}
-      <div className="flex gap-2">
-        {(["lines", "words"] as const).map((m) => (
-          <button key={m} onClick={() => setMode(m)}
-            className="rounded-lg px-3 py-1.5 text-xs font-medium transition"
-            style={mode === m
-              ? { border: "1px solid var(--nebula)", background: "rgba(108,99,255,.1)", color: "var(--halo)" }
-              : { border: "1px solid var(--stroke)", color: "var(--muted)" }}>
-            {m === "lines" ? "Par lignes" : "Par mots"}
-          </button>
-        ))}
-      </div>
-
-      {/* Inputs */}
-      <div className="grid grid-cols-2 gap-3">
-        {([
-          [left,  setLeft,  "Texte A — original"],
-          [right, setRight, "Texte B — modifié"],
-        ] as const).map(([val, setter, label], idx) => (
-          <div key={idx}>
-            <label className="block text-[11px] mb-1.5" style={{ color: "var(--muted)" }}>{label}</label>
-            <textarea value={val} onChange={(e) => (setter as (v: string) => void)(e.target.value)}
-              rows={6} placeholder="Colle ton texte ici…"
-              className="w-full rounded-xl px-4 py-3 text-xs font-mono focus:outline-none"
-              style={inputSty} />
-          </div>
-        ))}
-      </div>
-
-      {/* Stats */}
-      {hasDiff && !identical && (
-        <div className="flex gap-4 text-xs select-none">
-          <span style={{ color: "#4ade80" }}>+{stats.add} ajout{stats.add > 1 ? "s" : ""}</span>
-          <span style={{ color: "#f87171" }}>−{stats.del} suppression{stats.del > 1 ? "s" : ""}</span>
-          <span style={{ color: "var(--muted)" }}>{stats.eq} ligne{stats.eq > 1 ? "s" : ""} identique{stats.eq > 1 ? "s" : ""}</span>
-        </div>
-      )}
-
-      {/* Identical */}
-      {identical && (
-        <p className="text-xs text-center py-2 font-medium" style={{ color: "#4ade80" }}>
-          ✓ Les deux textes sont identiques.
-        </p>
-      )}
-
-      {/* Diff output */}
-      {hasDiff && !identical && lineDiff.length > 0 && (
-        <div className="rounded-xl overflow-auto max-h-80"
-          style={{ border: "1px solid var(--stroke)", background: "rgba(0,0,0,.35)" }}>
-          {mode === "lines"
-            ? lineDiff.map((d, i) => (
-                <div key={i} className="flex py-0.5 px-3"
-                  style={{
-                    background: d.type === "add" ? "rgba(34,197,94,.08)" : d.type === "del" ? "rgba(207,35,40,.08)" : "transparent",
-                    borderBottom: "1px solid rgba(255,255,255,.025)",
-                  }}>
-                  <span className="w-4 text-[10px] select-none mr-3 flex-shrink-0 font-mono"
-                    style={{ color: d.type === "add" ? "#22c55e" : d.type === "del" ? "#CF2328" : "var(--muted)", opacity: d.type === "eq" ? .3 : .8 }}>
-                    {d.type === "add" ? "+" : d.type === "del" ? "−" : " "}
-                  </span>
-                  <span className="font-mono text-xs whitespace-pre-wrap break-all flex-1"
-                    style={{ color: d.type === "add" ? "#4ade80" : d.type === "del" ? "#f87171" : "var(--muted)", opacity: d.type === "eq" ? .55 : 1 }}>
-                    {d.val || " "}
-                  </span>
-                </div>
-              ))
-            : (() => {
-                const elems: React.ReactNode[] = [];
-                let idx = 0;
-                while (idx < lineDiff.length) {
-                  const cur  = lineDiff[idx];
-                  const next = lineDiff[idx + 1];
-                  if (cur.type === "del" && next?.type === "add") {
-                    elems.push(<WordDiffPair key={idx} delLine={cur.val} addLine={next.val} />);
-                    idx += 2;
-                  } else {
-                    elems.push(
-                      <div key={idx} className="flex py-0.5 px-3"
-                        style={{
-                          background: cur.type === "add" ? "rgba(34,197,94,.08)" : cur.type === "del" ? "rgba(207,35,40,.08)" : "transparent",
-                          borderBottom: "1px solid rgba(255,255,255,.025)",
-                        }}>
-                        <span className="w-4 text-[10px] select-none mr-3 flex-shrink-0 font-mono"
-                          style={{ color: cur.type === "add" ? "#22c55e" : cur.type === "del" ? "#CF2328" : "var(--muted)", opacity: cur.type === "eq" ? .3 : .8 }}>
-                          {cur.type === "add" ? "+" : cur.type === "del" ? "−" : " "}
-                        </span>
-                        <span className="font-mono text-xs whitespace-pre-wrap break-all flex-1"
-                          style={{ color: cur.type === "add" ? "#4ade80" : cur.type === "del" ? "#f87171" : "var(--muted)", opacity: cur.type === "eq" ? .55 : 1 }}>
-                          {cur.val || " "}
-                        </span>
-                      </div>
-                    );
-                    idx++;
-                  }
-                }
-                return elems;
-              })()
-          }
-        </div>
-      )}
-    </div>
-  );
-}
 
 /* ── LOREM IPSUM ─────────────────────────────────────────── */
 
