@@ -18,6 +18,7 @@ import {
   Download,
   X,
   ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 
 /* ── Types ─────────────────────────────────────────────── */
@@ -988,9 +989,12 @@ export default function Tools() {
   const reduce = useReducedMotion();
   const [active, setActive] = useState<ToolId | null>(null);
   const [category, setCategory] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   const categories = [...new Set(TOOLS.map((t) => t.badge))];
-  const visibleTools = TOOLS.length > 9 && category ? TOOLS.filter((t) => t.badge === category) : TOOLS;
+  const filteredTools = TOOLS.length > 9 && category ? TOOLS.filter((t) => t.badge === category) : TOOLS;
+  const visibleTools = !category && TOOLS.length > 9 && !expanded ? filteredTools.slice(0, 9) : filteredTools;
+  const showExpandBtn = !category && TOOLS.length > 9;
 
   const workspaces: Record<ToolId, React.ReactNode> = {
     resize: <ResizeTool />, merge: <MergeTool />, extract: <ExtractTool />,
@@ -1009,7 +1013,7 @@ export default function Tools() {
       {TOOLS.length > 9 && (
         <div className="flex flex-wrap gap-2 mb-6">
           <button
-            onClick={() => { setCategory(null); setActive(null); }}
+            onClick={() => { setCategory(null); setActive(null); setExpanded(false); }}
             className="rounded-full px-3 py-1.5 text-xs transition-all"
             style={!category
               ? { border: "1px solid var(--nebula)", background: "rgba(108,99,255,.12)", color: "var(--halo)" }
@@ -1059,6 +1063,18 @@ export default function Tools() {
           </motion.button>
         ))}
       </div>
+
+      {showExpandBtn && (
+        <div className="mt-4 flex justify-center">
+          <button
+            onClick={() => { setExpanded((v) => !v); setActive(null); }}
+            className="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs transition-all hover:opacity-80"
+            style={{ border: "1px solid var(--stroke)", color: "var(--muted)" }}>
+            {expanded ? "Voir moins" : `Voir plus (${TOOLS.length - 9})`}
+            <ChevronDown size={13} className="transition-transform duration-300" style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }} />
+          </button>
+        </div>
+      )}
 
       <AnimatePresence>
         {active && (
