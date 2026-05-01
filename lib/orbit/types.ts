@@ -68,6 +68,31 @@ export interface Environment {
   createdAt: number;
 }
 
+/* ── Profile ───────────────────────────────────────────── */
+export interface Profile {
+  id: "singleton";
+  firstName: string;
+  lastName: string;
+  email: string;
+  photo: string;
+  bio: string;
+  updatedAt: number;
+}
+
+export function defaultProfile(): Profile {
+  return { id: "singleton", firstName: "", lastName: "", email: "", photo: "", bio: "", updatedAt: Date.now() };
+}
+
+/* ── Backup ─────────────────────────────────────────────── */
+export interface OrbitBackup {
+  version: 2;
+  exportedAt: string;
+  collections: Collection[];
+  requests: SavedRequest[];
+  environments: Environment[];
+  profile: Profile | null;
+}
+
 /* ── Defaults ──────────────────────────────────────────── */
 export function defaultRequest(): OrbitRequest {
   return {
