@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useLayoutEffect } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
-  Plus, Folder as FolderIcon, FileText, ChevronRight,
+  Plus, Folder as FolderIcon, FileText, ChevronRight, ChevronDown,
   Trash2, Settings2, Upload, Edit2, Check, X, FolderPlus, Move,
 } from "lucide-react";
 import { db, deleteFolder } from "@/lib/orbit/db";
@@ -267,17 +267,11 @@ export default function Sidebar({ onLoadRequest, activeEnvId, onEnvChange, onOpe
             <Settings2 size={13} />
           </button>
         </div>
-        <select
-          value={activeEnvId ?? ""}
-          onChange={(e) => onEnvChange(e.target.value || null)}
-          className="w-full rounded-lg px-2.5 py-1.5 text-xs focus:outline-none"
-          style={{ border: "1px solid var(--stroke)", background: "var(--card-bg)", color: "var(--text)" }}
-        >
-          <option value="">Aucun</option>
-          {environments?.map((env) => (
-            <option key={env.id} value={env.id}>{env.name}</option>
-          ))}
-        </select>
+        <EnvSelect
+          value={activeEnvId}
+          options={environments ?? []}
+          onChange={onEnvChange}
+        />
       </div>
 
       {/* Move Modal */}
@@ -755,6 +749,129 @@ function MoveModal({ item, onClose }: { item: SavedRequest; onClose: () => void 
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   Environment selector (replaces the native <select>)
+══════════════════════════════════════════════════════════ */
+function EnvSelect({
+  value, options, onChange,
+}: {
+  value: string | null;
+  options: Environment[];
+  onChange: (id: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const active = options.find(e => e.id === value) ?? null;
+
+  return (
+    <div className="relative">
+      {/* ── Trigger ──────────────────────────────────────── */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between rounded-lg px-2.5 py-2 text-xs transition hover:opacity-90"
+        style={{
+          border:     "1px solid var(--stroke)",
+          background: active ? "rgba(108,99,255,.07)" : "rgba(255,255,255,.02)",
+          color:      active ? "var(--text)"          : "var(--muted)",
+        }}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {/* Status dot */}
+          <span
+            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+            style={{
+              background: active ? "var(--nebula)" : "var(--muted)",
+              opacity:    active ? 1 : 0.35,
+              boxShadow:  active ? "0 0 5px var(--nebula)" : "none",
+            }}
+          />
+          <span className="truncate">{active?.name ?? "None"}</span>
+        </div>
+        <ChevronDown
+          size={11}
+          className="flex-shrink-0 transition-transform"
+          style={{
+            transform: open ? "rotate(180deg)" : "none",
+            color: "var(--muted)",
+          }}
+        />
+      </button>
+
+      {/* ── Dropdown (opens upward) ───────────────────────── */}
+      {open && (
+        <>
+          {/* Click-outside backdrop */}
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+
+          <div
+            className="absolute left-0 right-0 z-50 rounded-xl overflow-hidden shadow-2xl"
+            style={{
+              bottom: "calc(100% + 6px)",
+              border: "1px solid var(--stroke)",
+              background: "var(--nav-bg)",
+            }}
+          >
+            {/* None */}
+            <button
+              onClick={() => { onChange(null); setOpen(false); }}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs transition hover:opacity-80"
+              style={{
+                background:   !active ? "rgba(108,99,255,.10)" : "transparent",
+                borderBottom: "1px solid var(--stroke)",
+              }}
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                style={{ background: "var(--muted)", opacity: 0.3 }}
+              />
+              <span style={{ color: !active ? "var(--text)" : "var(--muted)" }}>None</span>
+              {!active && (
+                <Check size={10} className="ml-auto" style={{ color: "var(--nebula)" }} />
+              )}
+            </button>
+
+            {/* Environment entries */}
+            {options.map(env => {
+              const isCurrent = env.id === value;
+              return (
+                <button
+                  key={env.id}
+                  onClick={() => { onChange(env.id); setOpen(false); }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs transition hover:opacity-80"
+                  style={{
+                    background: isCurrent ? "rgba(108,99,255,.10)" : "transparent",
+                    color: "var(--text)",
+                  }}
+                >
+                  <span
+                    className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                    style={{
+                      background: "var(--nebula)",
+                      boxShadow:  isCurrent ? "0 0 5px var(--nebula)" : "none",
+                    }}
+                  />
+                  <span className="truncate font-medium">{env.name}</span>
+                  {/* Variable count */}
+                  {env.variables?.filter(v => v.enabled && v.key).length > 0 && (
+                    <span
+                      className="ml-1 rounded-full px-1.5 py-0.5 text-[9px] font-medium"
+                      style={{ background: "rgba(108,99,255,.15)", color: "var(--nebula)" }}
+                    >
+                      {env.variables.filter(v => v.enabled && v.key).length}
+                    </span>
+                  )}
+                  {isCurrent && (
+                    <Check size={10} className="ml-auto flex-shrink-0" style={{ color: "var(--nebula)" }} />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }
