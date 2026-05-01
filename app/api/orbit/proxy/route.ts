@@ -1,24 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import https from "node:https";
 import http from "node:http";
+import { SSL_OP_LEGACY_SERVER_CONNECT } from "node:constants";
 
 /**
  * Server-side HTTP/HTTPS proxy for Orbit.
- * – No CORS (Node.js)
- * – rejectUnauthorized: false   → ignores self-signed / expired certs
- * – minVersion TLSv1            → accepts TLS 1.0/1.1 legacy servers
- * – Explicit Content-Length     → compatible with ASP.NET/.aspx endpoints
+ *
+ * Key TLS flags that fix connectivity to old/corporate servers:
+ *   rejectUnauthorized: false        — ignore cert errors (expired, self-signed)
+ *   SSL_OP_LEGACY_SERVER_CONNECT     — allow servers that don't support RFC 5746
+ *                                      safe-renegotiation (most old ASP.NET/.aspx)
+ *   ALPNProtocols: ["http/1.1"]      — force HTTP/1.1, skip HTTP/2 negotiation
+ *
+ * All three are safe for a local dev-tool proxy (same as Postman/Insomnia).
  */
 export const runtime = "nodejs";
 
 const httpsAgent = new https.Agent({
   rejectUnauthorized: false,
-  minVersion: "TLSv1" as any,
+  secureOptions: SSL_OP_LEGACY_SERVER_CONNECT,
+  ALPNProtocols: ["http/1.1"],
+  keepAlive: false,
 });
 
 const httpAgent = new http.Agent({ keepAlive: false });
 
-/* ── Core request helper ─────────────────────────────────── */
+/* ── Core helper ─────────────────────────────────────────── */
 interface ProxyResult {
   status: number;
   statusText: string;
@@ -39,13 +46,14 @@ function proxyRequest(
     const port    = parsed.port ? parseInt(parsed.port, 10) : (isHttps ? 443 : 80);
 
     const headers: Record<string, string> = {
-      // Default User-Agent — some servers (esp. .aspx) reject headless requests
-      "user-agent": "Orbit/1.0 (HTTP client)",
+      "user-agent":      reqHeaders["user-agent"]      ?? "Orbit/1.0",
+      "accept":          reqHeaders["accept"]          ?? "*/*",
+      "accept-encoding": reqHeaders["accept-encoding"] ?? "identity",
       ...reqHeaders,
     };
 
-    // Always set explicit Content-Length — many ASP.NET / legacy servers
-    // reject chunked transfer-encoding (which Node uses by default with write())
+    // ASP.NET / legacy HTTP/1.1 servers require explicit Content-Length.
+    // Without it Node uses chunked encoding which many old servers reject.
     if (bodyBuf) {
       headers["content-length"] = String(bodyBuf.byteLength);
     }
@@ -56,7 +64,7 @@ function proxyRequest(
       path:     parsed.pathname + parsed.search,
       method:   method.toUpperCase(),
       headers,
-      agent: isHttps ? httpsAgent : (httpAgent as any),
+      agent:    isHttps ? httpsAgent : (httpAgent as any),
     };
 
     const start  = Date.now();
@@ -73,7 +81,7 @@ function proxyRequest(
           if (v !== undefined) resHeaders[k] = Array.isArray(v) ? v.join(", ") : v;
         }
         resolve({
-          status:     res.statusCode   ?? 0,
+          status:     res.statusCode    ?? 0,
           statusText: res.statusMessage ?? "",
           headers:    resHeaders,
           body:       buf.toString("utf8"),
@@ -84,9 +92,8 @@ function proxyRequest(
     });
 
     req.on("error", reject);
-
     req.setTimeout(30_000, () => {
-      req.destroy(new Error("ETIMEDOUT: Request timed out after 30 s"));
+      req.destroy(new Error("ETIMEDOUT"));
     });
 
     if (bodyBuf) req.write(bodyBuf);
@@ -119,11 +126,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: `Invalid URL: ${url}` }, { status: 400 });
   }
 
-  // Strip hop-by-hop headers that Node manages itself
+  // Strip hop-by-hop headers — Node sets these itself
   const cleanHeaders: Record<string, string> = {};
   for (const [k, v] of Object.entries(headers)) {
-    const lk = k.toLowerCase();
-    if (!["host", "content-length", "transfer-encoding", "connection"].includes(lk)) {
+    if (!["host", "content-length", "transfer-encoding", "connection"].includes(k.toLowerCase())) {
       cleanHeaders[k] = v;
     }
   }
@@ -133,7 +139,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       ? Buffer.from(body, "utf8")
       : undefined;
 
-  // Log on the server side so the terminal shows the real error
   console.log(`[Orbit Proxy] → ${method.toUpperCase()} ${url}`);
 
   try {
@@ -147,13 +152,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const friendly =
       code === "ECONNREFUSED"  ? `Connection refused — server unreachable at ${parsed.host}` :
       code === "ENOTFOUND"     ? `DNS lookup failed: host "${parsed.hostname}" not found` :
-      code === "ECONNRESET"    ? "Connection reset by remote server" :
-      code === "EPROTO"        ? `TLS/SSL handshake failed: ${raw}` :
-      code === "CERT_HAS_EXPIRED" ? "Server certificate has expired" :
-      raw.includes("ETIMEDOUT")   ? "Request timed out after 30 s" :
+      code === "ECONNRESET"    ? `Connection reset — server rejected the TLS handshake. Try switching to HTTP if the server doesn't support HTTPS.` :
+      code === "EPROTO"        ? `TLS protocol error: ${raw}` :
+      raw.includes("ETIMEDOUT") ? "Request timed out after 30 s" :
       raw;
 
-    console.error(`[Orbit Proxy] ✗ ${code || "ERR"} — ${raw}`);
+    console.error(`[Orbit Proxy] ✗ ${code || "ERR"}: ${raw}`);
     return NextResponse.json({ error: friendly }, { status: 502 });
   }
 }
