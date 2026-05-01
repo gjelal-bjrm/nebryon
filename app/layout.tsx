@@ -2,9 +2,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 import { Syne } from "next/font/google";
 import ConditionalNavbar from "@/components/ConditionalNavbar";
-import dynamic from "next/dynamic";
-
-const WelcomeSetup = dynamic(() => import("@/components/WelcomeSetup"), { ssr: false });
+import WelcomeSetupLoader from "@/components/WelcomeSetupLoader";
 
 const syne = Syne({
   subsets: ["latin"],
@@ -23,7 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="fr" className={syne.variable}>
       <body className={`${syne.className} min-h-screen antialiased`}>
         <ConditionalNavbar />
-        <WelcomeSetup />
+        <WelcomeSetupLoader />
         {children}
       </body>
     </html>
