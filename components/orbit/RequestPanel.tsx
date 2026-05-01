@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Send, Save, ChevronDown, Copy, Check, BookmarkCheck } from "lucide-react";
+import { Send, Save, ChevronDown, Copy, Check, BookmarkCheck, X as XIcon } from "lucide-react";
 import dynamic from "next/dynamic";
 import KVEditor from "./KVEditor";
 import type { OrbitRequest, ReqTab, Method } from "@/lib/orbit/types";
@@ -26,6 +26,7 @@ interface Props {
   onChange: (req: OrbitRequest) => void;
   onSend: () => void;
   onSave: () => void;
+  onCancel: () => void;
   sending: boolean;
   /** Briefly true after a direct (non-dialog) save */
   savedFlash?: boolean;
@@ -34,7 +35,7 @@ interface Props {
 }
 
 export default function RequestPanel({
-  req, onChange, onSend, onSave, sending, savedFlash = false, activeName = null,
+  req, onChange, onSend, onSave, onCancel, sending, savedFlash = false, activeName = null,
 }: Props) {
   const [tab, setTab] = useState<ReqTab>("params");
   const [methodOpen, setMethodOpen] = useState(false);
@@ -124,15 +125,26 @@ export default function RequestPanel({
           }
         </button>
 
-        {/* Send */}
-        <button
-          onClick={onSend}
-          disabled={sending || !req.url.trim()}
-          className="flex items-center gap-1.5 rounded-lg px-4 h-9 text-xs font-semibold transition hover:opacity-85 disabled:opacity-40"
-          style={{ background: "linear-gradient(135deg,var(--nebula),var(--indigo))", color: "#fff" }}
-        >
-          <Send size={13} /> {sending ? "Sending…" : "Send"}
-        </button>
+        {/* Send / Cancel */}
+        {sending ? (
+          <button
+            onClick={onCancel}
+            className="flex items-center gap-1.5 rounded-lg px-4 h-9 text-xs font-semibold transition hover:opacity-85"
+            style={{ background: "linear-gradient(135deg,#CF2328,#7f1d1d)", color: "#fff", minWidth: "80px" }}
+            title="Cancel request"
+          >
+            <XIcon size={13} /> Cancel
+          </button>
+        ) : (
+          <button
+            onClick={onSend}
+            disabled={!req.url.trim()}
+            className="flex items-center gap-1.5 rounded-lg px-4 h-9 text-xs font-semibold transition hover:opacity-85 disabled:opacity-40"
+            style={{ background: "linear-gradient(135deg,var(--nebula),var(--indigo))", color: "#fff" }}
+          >
+            <Send size={13} /> Send
+          </button>
+        )}
       </div>
 
       {/* Tabs */}

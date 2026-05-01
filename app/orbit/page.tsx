@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { useAutoBackup } from "@/hooks/useAutoBackup";
 import { writeBackup, isElectron } from "@/lib/orbit/autobackup";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -11,6 +11,7 @@ import Sidebar from "@/components/orbit/Sidebar";
 import SaveDialog from "@/components/orbit/SaveDialog";
 import OrbitTopbar from "@/components/orbit/OrbitTopbar";
 import TabBar from "@/components/orbit/TabBar";
+import RocketHandle from "@/components/orbit/RocketHandle";
 import type { TabInfo } from "@/components/orbit/TabBar";
 import { db } from "@/lib/orbit/db";
 import { runRequest } from "@/lib/orbit/runner";
@@ -20,11 +21,11 @@ import type { OrbitRequest, OrbitResponse, SavedRequest, Environment } from "@/l
 const EnvEditor     = dynamic(() => import("@/components/orbit/EnvEditor"),     { ssr: false });
 const ProfileEditor = dynamic(() => import("@/components/orbit/ProfileEditor"), { ssr: false });
 
-/* ── Resize hook ────────────────────────────────────────── */
-/**
- * Both axes work in absolute pixels now.
- * (The old vertical split used %, causing pixel-delta to be added to a % value — that's the bug.)
- */
+/* ── localStorage keys ──────────────────────────────────── */
+const LS_TABS   = "orbit-tabs-v1";
+const LS_ACTIVE = "orbit-active-tab-v1";
+
+/* ── Resize hook (all axes in absolute px) ──────────────── */
 function useResize(initial: number, min: number, max: number, axis: "x" | "y") {
   const [size, setSize] = useState(initial);
   const dragging = useRef(false);
@@ -68,6 +69,7 @@ interface Tab {
   response: OrbitResponse | null;
   error: string | null;
   sending: boolean;
+  controller: AbortController | null;
 }
 
 function createTab(req?: OrbitRequest, meta?: ActiveMeta, key?: string): Tab {
@@ -79,21 +81,57 @@ function createTab(req?: OrbitRequest, meta?: ActiveMeta, key?: string): Tab {
     response:   null,
     error:      null,
     sending:    false,
+    controller: null,
   };
+}
+
+/* Restore a plain object from localStorage into a full Tab */
+function hydrateTab(raw: { key?: string; req?: unknown; meta?: unknown }): Tab {
+  return createTab(
+    (raw.req as OrbitRequest) ?? defaultRequest(),
+    (raw.meta as ActiveMeta)  ?? undefined,
+    raw.key,
+  );
 }
 
 /* ── Main page ──────────────────────────────────────────── */
 export default function OrbitPage() {
-  // Compute initial tab once — same object used for both useState calls so keys match
+  // Stable initial tab — same key for tabs[] and activeTabKey
   const initRef = useRef<Tab | null>(null);
   if (!initRef.current) initRef.current = createTab();
 
   const [tabs,         setTabs]         = useState<Tab[]>([initRef.current]);
   const [activeTabKey, setActiveTabKey] = useState<string>(initRef.current.key);
 
+  /* ── Restore tabs from localStorage (before first paint) ── */
+  useLayoutEffect(() => {
+    try {
+      const raw    = localStorage.getItem(LS_TABS);
+      const active = localStorage.getItem(LS_ACTIVE);
+      if (!raw) return;
+
+      const parsed: unknown[] = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) return;
+
+      const restored = parsed.map(t => hydrateTab(t as never));
+      setTabs(restored);
+      const validActive = active && restored.find(t => t.key === active);
+      setActiveTabKey(validActive ? active! : restored[0].key);
+    } catch { /* corrupt data — silently ignore */ }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Persist tabs to localStorage whenever they change ──── */
+  useEffect(() => {
+    try {
+      // Save only serialisable fields (no AbortController, no response data)
+      const toSave = tabs.map(({ key, req, meta }) => ({ key, req, meta }));
+      localStorage.setItem(LS_TABS,   JSON.stringify(toSave));
+      localStorage.setItem(LS_ACTIVE, activeTabKey);
+    } catch { /* private browsing / storage full — ignore */ }
+  }, [tabs, activeTabKey]);
+
   useAutoBackup();
 
-  // Electron: backup before quit
   useEffect(() => {
     if (!isElectron()) return;
     const handler = async () => {
@@ -110,7 +148,7 @@ export default function OrbitPage() {
 
   const activeEnvRaw = useLiveQuery<Environment | undefined>(
     async () => activeEnvId ? db.environments.get(activeEnvId) : undefined,
-    [activeEnvId]
+    [activeEnvId],
   );
   const activeEnv = activeEnvRaw ?? null;
 
@@ -126,25 +164,38 @@ export default function OrbitPage() {
     const tab = tabs.find(t => t.key === activeTabKey);
     if (!tab || !tab.req.url.trim() || tab.sending) return;
 
-    updateTab(tab.key, { sending: true, error: null, response: null });
+    const controller = new AbortController();
+    updateTab(tab.key, { sending: true, error: null, response: null, controller });
+
     try {
-      const res = await runRequest(tab.req, activeEnv ?? null);
-      updateTab(tab.key, { response: res, sending: false });
-    } catch (e) {
-      updateTab(tab.key, { error: e instanceof Error ? e.message : "Unknown error", sending: false });
+      const res = await runRequest(tab.req, activeEnv ?? null, controller.signal);
+      updateTab(tab.key, { response: res, sending: false, controller: null });
+    } catch (e: unknown) {
+      const isAbort = (e as { name?: string })?.name === "AbortError";
+      updateTab(tab.key, {
+        sending:    false,
+        controller: null,
+        // On cancel: keep previous state (no error shown). On real error: show message.
+        error:      isAbort ? null : (e instanceof Error ? e.message : "Unknown error"),
+        response:   isAbort ? tab.response : null,
+      });
     }
   }, [tabs, activeTabKey, activeEnv, updateTab]);
+
+  /* ── Cancel ─────────────────────────────────────────────── */
+  const handleCancel = useCallback(() => {
+    const tab = tabs.find(t => t.key === activeTabKey);
+    tab?.controller?.abort();
+  }, [tabs, activeTabKey]);
 
   /* ── Load request from sidebar ──────────────────────────── */
   const handleLoadRequest = useCallback((saved: SavedRequest) => {
     const { id, collectionId, folderId, name, createdAt: _c, updatedAt: _u, ...rest } = saved;
     const meta: ActiveMeta = { id, collectionId, folderId: folderId ?? null, name };
 
-    // Switch to existing tab if already open
     const existing = tabs.find(t => t.meta?.id === id);
     if (existing) { setActiveTabKey(existing.key); return; }
 
-    // Open new tab (use saved request id as stable tab key)
     const tab = createTab(rest as OrbitRequest, meta, id);
     setTabs(ts => [...ts, tab]);
     setActiveTabKey(id);
@@ -160,11 +211,13 @@ export default function OrbitPage() {
   /* ── Close tab ──────────────────────────────────────────── */
   const handleCloseTab = useCallback((key: string) => {
     setTabs(prev => {
+      // Abort any in-flight request for the closing tab
+      prev.find(t => t.key === key)?.controller?.abort();
+
       const idx   = prev.findIndex(t => t.key === key);
       const next  = prev.filter(t => t.key !== key);
       const final = next.length ? next : [createTab()];
 
-      // Update active key if the closed tab was active
       setActiveTabKey(prevKey => {
         if (prevKey !== key) return prevKey;
         return final[Math.max(0, idx - 1)]?.key ?? final[0]!.key;
@@ -187,7 +240,7 @@ export default function OrbitPage() {
     }
   }, [tabs, activeTabKey, updateTab]);
 
-  /* ── After first dialog save: track the new request ────── */
+  /* ── After dialog save ──────────────────────────────────── */
   const handleSavedInDialog = useCallback(async (id: string) => {
     const saved = await db.requests.get(id);
     if (saved) {
@@ -204,37 +257,36 @@ export default function OrbitPage() {
 
   /* ── Ctrl+S ─────────────────────────────────────────────── */
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
+    const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); handleSave(); }
     };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
   }, [handleSave]);
 
-  /* ── Ctrl+T: new tab ────────────────────────────────────── */
+  /* ── Ctrl+T / Ctrl+W ────────────────────────────────────── */
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
+    const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "t") { e.preventDefault(); handleNewTab(); }
     };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
   }, [handleNewTab]);
 
-  /* ── Ctrl+W: close active tab ───────────────────────────── */
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
+    const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "w") {
         e.preventDefault();
         setActiveTabKey(k => { handleCloseTab(k); return k; });
       }
     };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
   }, [handleCloseTab]);
 
   /* ── Resizable panels ───────────────────────────────────── */
   const sidebar = useResize(240, 160, 480, "x");
-  const reqPane = useResize(320, 80, 700, "y"); // absolute pixels — fixes the % bug
+  const reqPane = useResize(320, 80, 700, "y");
 
   /* ── Tab info for TabBar ────────────────────────────────── */
   const tabInfos: TabInfo[] = tabs.map(t => ({
@@ -243,15 +295,16 @@ export default function OrbitPage() {
     metaName: t.meta?.name ?? null,
   }));
 
+  /* ── Is any request in-flight? (for RocketHandle) ───────── */
+  const anySending = activeTab.sending;
+
   return (
     <div
       className="flex flex-col h-screen overflow-hidden"
       style={{ background: "var(--bg)", color: "var(--text)" }}
     >
-      {/* Topbar */}
       <OrbitTopbar onOpenProfile={() => setShowProfile(true)} />
 
-      {/* Body */}
       <div className="flex flex-1 overflow-hidden">
 
         {/* ── Sidebar ─────────────────────────────────────── */}
@@ -286,7 +339,7 @@ export default function OrbitPage() {
             onNew={handleNewTab}
           />
 
-          {/* Request panel — fixed pixel height */}
+          {/* Request panel */}
           <div
             className="overflow-hidden flex-shrink-0"
             style={{ height: reqPane.size, borderBottom: "1px solid var(--stroke)", userSelect: "none" }}
@@ -296,22 +349,20 @@ export default function OrbitPage() {
               onChange={(req) => updateTab(activeTab.key, { req })}
               onSend={handleSend}
               onSave={handleSave}
+              onCancel={handleCancel}
               sending={activeTab.sending}
               savedFlash={activeTab.savedFlash}
               activeName={activeTab.meta?.name ?? null}
             />
           </div>
 
-          {/* Vertical resize handle */}
-          <div
+          {/* Rocket resize handle */}
+          <RocketHandle
             onMouseDown={reqPane.onMouseDown}
-            className="flex-shrink-0 h-1.5 cursor-row-resize"
-            style={{ background: "var(--stroke)", userSelect: "none" }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--nebula)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "var(--stroke)")}
+            loading={anySending}
           />
 
-          {/* Response panel — text is selectable here */}
+          {/* Response panel */}
           <div className="flex-1 overflow-hidden">
             <ResponsePanel
               response={activeTab.response}
