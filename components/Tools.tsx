@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import dynamic from "next/dynamic";
 import {
   Image as ImageIcon,
   FilePlus,
@@ -30,10 +31,13 @@ import {
   MapPin,
   GitCompare,
   FileText,
+  FileUser,
 } from "lucide-react";
 
+const CVBuilder = dynamic(() => import("./cv/CVBuilder"), { ssr: false });
+
 /* ── Types ─────────────────────────────────────────────── */
-type ToolId = "resize" | "merge" | "extract" | "convert" | "password" | "tva" | "date" | "units" | "base64" | "meta" | "qrcode" | "clock" | "diff" | "lorem";
+type ToolId = "resize" | "merge" | "extract" | "convert" | "password" | "tva" | "date" | "units" | "base64" | "meta" | "qrcode" | "clock" | "diff" | "lorem" | "cv";
 
 interface Tool {
   id: ToolId;
@@ -59,6 +63,7 @@ const TOOLS: Tool[] = [
   { id: "clock",    icon: <Clock size={18} />,          title: "Horloge",                    desc: "Affichage de l'heure en grand, personnalisable — idéal pour les examens ou réunions.", badge: "Quotidien" },
   { id: "diff",     icon: <GitCompare size={18} />,    title: "Comparateur de texte",       desc: "Compare deux blocs de texte et affiche les différences ligne par ligne ou mot par mot.", badge: "Dev" },
   { id: "lorem",    icon: <FileText size={18} />,      title: "Lorem Ipsum",                desc: "Génère du texte de remplissage par paragraphes, phrases ou mots.",                     badge: "Dev" },
+  { id: "cv",       icon: <FileUser size={18} />,     title: "Générateur de CV",           desc: "Crée un CV professionnel et téléchargeable en PDF. Templates, couleurs, mode ATS.",       badge: "Pro" },
 ];
 
 /* ── Helpers ────────────────────────────────────────────── */
@@ -1805,6 +1810,25 @@ function ClockTool() {
 
 declare global { interface Window { PDFLib?: any; } }
 
+/* ── CV GENERATOR ───────────────────────────────────────── */
+function CVTool() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <div className="flex flex-col items-center gap-4 py-4">
+        <div className="text-center">
+          <p className="text-sm font-medium mb-1" style={{ color: "var(--text)" }}>Générateur de CV professionnel</p>
+          <p className="text-xs leading-relaxed max-w-sm" style={{ color: "var(--muted)" }}>
+            3 templates visuels · mode ATS · option photo · 6 couleurs · téléchargement PDF
+          </p>
+        </div>
+        <ActionBtn onClick={() => setOpen(true)}>Ouvrir le générateur</ActionBtn>
+      </div>
+      {open && <CVBuilder onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
 /* ── MAIN ───────────────────────────────────────────────── */
 export default function Tools() {
   const reduce = useReducedMotion();
@@ -1822,7 +1846,7 @@ export default function Tools() {
     convert: <ConvertTool />, password: <PasswordTool />, tva: <TVATool />,
     date: <DateTool />, units: <UnitsTool />, base64: <Base64Tool />,
     meta: <MetaTool />, qrcode: <QRTool />, clock: <ClockTool />,
-    diff: <DiffTool />, lorem: <LoremTool />,
+    diff: <DiffTool />, lorem: <LoremTool />, cv: <CVTool />,
   };
 
   return (
