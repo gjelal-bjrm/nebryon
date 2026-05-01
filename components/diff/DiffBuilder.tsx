@@ -1,312 +1,184 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
-  X,
-  ChevronUp,
-  ChevronDown,
-  Copy,
-  Check,
-  Trash2,
-  ArrowLeftRight,
-  Upload,
-  AlignLeft,
-  CaseSensitive,
-  WrapText,
+  X, ChevronUp, ChevronDown, Upload, ArrowLeftRight,
+  Copy, Check, Trash2, AlignLeft, WrapText,
 } from "lucide-react";
 
-/* ──────────────────────────────────────────────────────────────
-   Types & diff algorithm
-────────────────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════
+   Diff algorithm
+════════════════════════════════════════════════════════════ */
 
-type DiffType = "eq" | "add" | "del" | "mod";
+type Op = "eq" | "add" | "del";
+interface DiffItem<T> { type: Op; val: T }
 
-interface DiffItem<T> {
-  type: "eq" | "add" | "del";
-  val: T;
-}
-
-function diffSeq<T>(a: T[], b: T[], eq?: (x: T, y: T) => boolean): DiffItem<T>[] {
-  const cmp = eq ?? ((x, y) => x === y);
+function lcs<T>(a: T[], b: T[]): DiffItem<T>[] {
   const m = a.length, n = b.length;
-  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  // dp[i][j] = LCS length for a[0..i-1], b[0..j-1]
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
   for (let i = 1; i <= m; i++)
     for (let j = 1; j <= n; j++)
-      dp[i][j] = cmp(a[i - 1], b[j - 1]) ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
 
-  const res: DiffItem<T>[] = [];
+  const out: DiffItem<T>[] = [];
   let i = m, j = n;
   while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && cmp(a[i - 1], b[j - 1])) {
-      res.unshift({ type: "eq", val: a[i - 1] }); i--; j--;
-    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-      res.unshift({ type: "add", val: b[j - 1] }); j--;
-    } else {
-      res.unshift({ type: "del", val: a[i - 1] }); i--;
-    }
+    if (i > 0 && j > 0 && a[i-1] === b[j-1]) { out.unshift({ type: "eq",  val: a[i-1] }); i--; j--; }
+    else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) { out.unshift({ type: "add", val: b[j-1] }); j--; }
+    else                                                        { out.unshift({ type: "del", val: a[i-1] }); i--; }
   }
-  return res;
+  return out;
 }
 
-/* ── Row model ─────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════
+   Row model
+════════════════════════════════════════════════════════════ */
+
+type RowKind = "eq" | "del" | "add" | "mod" | "blank";
 
 interface Row {
-  leftNum:   number | null;
-  leftText:  string | null;
-  leftKind:  DiffType | "blank";
+  lNum:  number | null;   // left line number (null = blank placeholder)
+  lText: string | null;   // left text (null = blank)
+  lKind: RowKind;
 
-  rightNum:  number | null;
-  rightText: string | null;
-  rightKind: DiffType | "blank";
+  rNum:  number | null;
+  rText: string | null;
+  rKind: RowKind;
 
-  chunkIdx:      number;  // which diff chunk this row belongs to (-1 = equal)
-  isChunkStart:  boolean;
+  chunk: number;           // -1 = equal, ≥0 = diff chunk index
 }
 
-/* ── Build rows from diff ──────────────────────────────────── */
-
 function buildRows(leftLines: string[], rightLines: string[], ignoreWS: boolean): Row[] {
-  const normalise = (s: string) => ignoreWS ? s.replace(/\s+/g, " ").trim() : s;
+  const norm = (s: string) => ignoreWS ? s.replace(/\s+/g, " ").trim() : s;
 
-  const diffs = diffSeq(
-    leftLines.map(normalise),
-    rightLines.map(normalise),
-  );
+  const diff = lcs(leftLines.map(norm), rightLines.map(norm));
 
-  // Reconstruct original line indices
-  let li = 0, ri = 0;
+  let li = 0, ri = 0, chunk = -1;
   const rows: Row[] = [];
-  let chunkIdx = -1;
+  let k = 0;
 
-  // Group consecutive del/add pairs as "modified"
-  let i = 0;
-  while (i < diffs.length) {
-    const cur  = diffs[i];
-    const next = diffs[i + 1];
+  while (k < diff.length) {
+    const cur  = diff[k];
+    const next = diff[k + 1];
 
     if (cur.type === "eq") {
-      rows.push({
-        leftNum: li + 1, leftText: leftLines[li], leftKind: "eq",
-        rightNum: ri + 1, rightText: rightLines[ri], rightKind: "eq",
-        chunkIdx: -1, isChunkStart: false,
-      });
-      li++; ri++; i++;
+      rows.push({ lNum: li+1, lText: leftLines[li], lKind: "eq", rNum: ri+1, rText: rightLines[ri], rKind: "eq", chunk: -1 });
+      li++; ri++; k++;
     } else if (cur.type === "del" && next?.type === "add") {
-      // modified pair
-      chunkIdx++;
-      rows.push({
-        leftNum: li + 1, leftText: leftLines[li], leftKind: "mod",
-        rightNum: ri + 1, rightText: rightLines[ri], rightKind: "mod",
-        chunkIdx, isChunkStart: true,
-      });
-      li++; ri++; i += 2;
+      // Paired modification
+      chunk++;
+      rows.push({ lNum: li+1, lText: leftLines[li], lKind: "mod", rNum: ri+1, rText: rightLines[ri], rKind: "mod", chunk });
+      li++; ri++; k += 2;
     } else if (cur.type === "del") {
-      chunkIdx++;
-      rows.push({
-        leftNum: li + 1, leftText: leftLines[li], leftKind: "del",
-        rightNum: null, rightText: null, rightKind: "blank",
-        chunkIdx, isChunkStart: true,
-      });
-      li++; i++;
+      chunk++;
+      rows.push({ lNum: li+1, lText: leftLines[li], lKind: "del", rNum: null, rText: null, rKind: "blank", chunk });
+      li++; k++;
     } else { // add
-      chunkIdx++;
-      rows.push({
-        leftNum: null, leftText: null, leftKind: "blank",
-        rightNum: ri + 1, rightText: rightLines[ri], rightKind: "add",
-        chunkIdx, isChunkStart: true,
-      });
-      ri++; i++;
+      chunk++;
+      rows.push({ lNum: null, lText: null, lKind: "blank", rNum: ri+1, rText: rightLines[ri], rKind: "add", chunk });
+      ri++; k++;
     }
   }
   return rows;
 }
 
-/* ── Word-level diff ───────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════
+   Word-level diff
+════════════════════════════════════════════════════════════ */
 
-interface WOp { type: "eq" | "add" | "del"; val: string }
+interface WOp { type: Op; val: string }
 
 function wordDiff(a: string, b: string): { left: WOp[]; right: WOp[] } {
   const tokA = a.split(/(\s+)/);
   const tokB = b.split(/(\s+)/);
-  const d = diffSeq(tokA, tokB);
-  const left: WOp[]  = [];
-  const right: WOp[] = [];
-  for (const item of d) {
-    if (item.type === "eq")  { left.push({ type: "eq",  val: item.val }); right.push({ type: "eq",  val: item.val }); }
-    if (item.type === "del") { left.push({ type: "del", val: item.val }); }
-    if (item.type === "add") { right.push({ type: "add", val: item.val }); }
+  const d = lcs(tokA, tokB);
+  const left: WOp[] = [], right: WOp[] = [];
+  for (const x of d) {
+    if (x.type === "eq")  { left.push({ type:"eq",  val:x.val }); right.push({ type:"eq",  val:x.val }); }
+    if (x.type === "del") { left.push({ type:"del", val:x.val }); }
+    if (x.type === "add") { right.push({ type:"add", val:x.val }); }
   }
   return { left, right };
 }
 
-/* ── Colours ───────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════
+   Colors / constants
+════════════════════════════════════════════════════════════ */
 
-const C = {
-  delBg:   "rgba(207,35,40,.16)",
-  delWord: "rgba(207,35,40,.55)",
-  delNum:  "rgba(207,35,40,.22)",
-  addBg:   "rgba(34,197,94,.14)",
-  addWord: "rgba(34,197,94,.45)",
-  addNum:  "rgba(34,197,94,.20)",
-  modLBg:  "rgba(207,35,40,.10)",
-  modRBg:  "rgba(34,197,94,.10)",
-  eqBg:    "transparent",
-  blank:   "repeating-linear-gradient(135deg,rgba(255,255,255,.025) 0,rgba(255,255,255,.025) 1px,transparent 1px,transparent 8px)",
-  numEq:   "rgba(160,160,160,.35)",
-  border:  "1px solid rgba(255,255,255,.07)",
+// Backgrounds for the full-width line strip
+const LINE_BG: Record<RowKind, string> = {
+  eq:    "transparent",
+  del:   "rgba(220,38,38,.22)",
+  add:   "rgba(22,163,74,.20)",
+  mod:   "transparent",          // set per-side below
+  blank: "rgba(128,128,128,.06)",
 };
+// Per-side bg for "mod" rows
+const MOD_L_BG = "rgba(220,38,38,.16)";
+const MOD_R_BG = "rgba(22,163,74,.14)";
 
-/* ── Row height (px) ───────────────────────────────────────── */
-const ROW_H = 22;
+// Number-column tint
+const NUM_BG: Record<RowKind, string> = {
+  eq:    "rgba(255,255,255,.03)",
+  del:   "rgba(220,38,38,.30)",
+  add:   "rgba(22,163,74,.28)",
+  mod:   "rgba(220,38,38,.22)",  // left — right overridden inline
+  blank: "rgba(128,128,128,.04)",
+};
+const NUM_BG_MOD_R = "rgba(22,163,74,.22)";
 
-/* ──────────────────────────────────────────────────────────────
-   Sub-components
-────────────────────────────────────────────────────────────── */
+// Word-level highlight
+const WORD_DEL = "rgba(220,38,38,.65)";
+const WORD_ADD = "rgba(22,163,74,.60)";
 
-function CellText({
-  text, kind, otherText, wordLevel,
+// Number column width
+const NUM_W = 52;
+// Row height
+const ROW_H = 21;
+// Divider between the two panels
+const DIVIDER = "rgba(255,255,255,.10)";
+// Equal row text opacity
+const EQ_OP = 0.55;
+
+/* ════════════════════════════════════════════════════════════
+   Cell renderer
+════════════════════════════════════════════════════════════ */
+
+function CellContent({
+  text, kind, otherText, wordLevel, isLeft,
 }: {
-  text: string; kind: DiffType | "blank"; otherText?: string | null; wordLevel: boolean;
+  text: string; kind: RowKind; otherText: string | null;
+  wordLevel: boolean; isLeft: boolean;
 }) {
-  if (kind === "blank") return null;
-
-  if (wordLevel && kind === "mod" && otherText != null) {
-    const { left, right } = wordDiff(
-      kind === "mod" ? text : "",
-      kind === "mod" ? (otherText ?? "") : text,
+  if (kind === "eq") {
+    return <span style={{ opacity: EQ_OP }}>{text}</span>;
+  }
+  if (kind === "mod" && wordLevel && otherText !== null) {
+    const { left, right } = wordDiff(isLeft ? text : otherText!, isLeft ? otherText! : text);
+    const ops = isLeft ? left : right;
+    const highlight = isLeft ? WORD_DEL : WORD_ADD;
+    return (
+      <>
+        {ops.map((w, i) => (
+          <span key={i} style={w.type !== "eq"
+            ? { background: highlight, borderRadius: 2, padding: "0 1px" }
+            : {}}>
+            {w.val}
+          </span>
+        ))}
+      </>
     );
-    // For the left cell we show `left`, for the right cell we show `right`
-    // But since we call this per-cell, we pick based on which side text appears
-    // We'll pass side as prop — see below
   }
-
-  // Simple render for non-mod or no word diff
-  return <span className="whitespace-pre font-mono text-[12px]">{text}</span>;
+  return <span>{text}</span>;
 }
 
-/* ── Row component ─────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════
+   DiffBuilder — main component
+════════════════════════════════════════════════════════════ */
 
-function DiffRow({
-  row, wordLevel, wrap,
-}: {
-  row: Row; wordLevel: boolean; wrap: boolean;
-}) {
-  const leftBg = row.leftKind === "del" ? C.delBg
-    : row.leftKind === "mod" ? C.modLBg
-    : row.leftKind === "blank" ? C.blank
-    : C.eqBg;
-
-  const rightBg = row.rightKind === "add" ? C.addBg
-    : row.rightKind === "mod" ? C.modRBg
-    : row.rightKind === "blank" ? C.blank
-    : C.eqBg;
-
-  const leftNumCol = row.leftKind === "del" ? C.delNum
-    : row.leftKind === "mod" ? C.delNum
-    : C.numEq;
-
-  const rightNumCol = row.rightKind === "add" ? C.addNum
-    : row.rightKind === "mod" ? C.addNum
-    : C.numEq;
-
-  const textStyle: React.CSSProperties = {
-    flex: 1,
-    overflow: wrap ? "visible" : "hidden",
-    whiteSpace: wrap ? "pre-wrap" : "pre",
-    wordBreak: wrap ? "break-all" : "normal",
-    fontFamily: "ui-monospace, 'Cascadia Code', Consolas, monospace",
-    fontSize: 12,
-    lineHeight: `${ROW_H}px`,
-    color: "var(--text)",
-    padding: "0 8px",
-  };
-
-  function renderText(text: string | null, kind: DiffType | "blank", otherText: string | null, isLeft: boolean) {
-    if (kind === "blank" || text === null) return null;
-
-    if (!wordLevel || kind === "eq") {
-      return <span style={{ opacity: kind === "eq" ? 0.55 : 1 }}>{text}</span>;
-    }
-
-    if (kind === "mod" && otherText !== null) {
-      const diff = isLeft
-        ? wordDiff(text, otherText).left
-        : wordDiff(otherText!, text).right;
-
-      return (
-        <>
-          {diff.map((w, k) => (
-            <span key={k} style={{
-              background: w.type === (isLeft ? "del" : "add") ? (isLeft ? C.delWord : C.addWord) : "transparent",
-              borderRadius: 2,
-            }}>
-              {w.val}
-            </span>
-          ))}
-        </>
-      );
-    }
-
-    // pure del or add
-    return <span>{text}</span>;
-  }
-
-  return (
-    <div style={{ display: "flex", minHeight: ROW_H, borderBottom: C.border }}>
-      {/* LEFT */}
-      <div style={{
-        display: "flex", flex: 1, minWidth: 0,
-        background: typeof leftBg === "string" && leftBg.startsWith("repeating")
-          ? undefined : leftBg,
-        ...(typeof leftBg === "string" && leftBg.startsWith("repeating") ? { backgroundImage: leftBg } : {}),
-      }}>
-        <span style={{
-          width: 42, minWidth: 42, textAlign: "right", paddingRight: 8,
-          fontFamily: "ui-monospace, monospace", fontSize: 11,
-          lineHeight: `${ROW_H}px`, userSelect: "none",
-          color: leftNumCol, flexShrink: 0,
-        }}>
-          {row.leftNum ?? ""}
-        </span>
-        <span style={textStyle}>
-          {renderText(row.leftText, row.leftKind, row.rightText, true)}
-        </span>
-      </div>
-
-      {/* Divider */}
-      <div style={{ width: 1, background: "rgba(255,255,255,.08)", flexShrink: 0 }} />
-
-      {/* RIGHT */}
-      <div style={{
-        display: "flex", flex: 1, minWidth: 0,
-        background: typeof rightBg === "string" && rightBg.startsWith("repeating")
-          ? undefined : rightBg,
-        ...(typeof rightBg === "string" && rightBg.startsWith("repeating") ? { backgroundImage: rightBg } : {}),
-      }}>
-        <span style={{
-          width: 42, minWidth: 42, textAlign: "right", paddingRight: 8,
-          fontFamily: "ui-monospace, monospace", fontSize: 11,
-          lineHeight: `${ROW_H}px`, userSelect: "none",
-          color: rightNumCol, flexShrink: 0,
-        }}>
-          {row.rightNum ?? ""}
-        </span>
-        <span style={textStyle}>
-          {renderText(row.rightText, row.rightKind, row.leftText, false)}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/* ──────────────────────────────────────────────────────────────
-   Main component
-────────────────────────────────────────────────────────────── */
-
-interface Props {
-  onClose: () => void;
-}
+interface Props { onClose: () => void }
 
 export default function DiffBuilder({ onClose }: Props) {
   const [mounted, setMounted] = useState(false);
@@ -314,297 +186,329 @@ export default function DiffBuilder({ onClose }: Props) {
 
   const [leftText,  setLeftText]  = useState("");
   const [rightText, setRightText] = useState("");
+
   const [ignoreWS,  setIgnoreWS]  = useState(false);
   const [wordLevel, setWordLevel] = useState(true);
   const [wrap,      setWrap]      = useState(false);
-  const [view,      setView]      = useState<"split" | "edit">("split");
+
+  const [editMode,  setEditMode]  = useState(false);   // true = textarea mode
+  const [chunk,     setChunk]     = useState(-1);       // active chunk for navigation
 
   const [copiedL, setCopiedL] = useState(false);
   const [copiedR, setCopiedR] = useState(false);
 
-  const scrollRef    = useRef<HTMLDivElement>(null);
-  const syncingRef   = useRef(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Chunk navigation
-  const [chunkIdx, setChunkIdx] = useState<number>(-1);
+  /* Lock body scroll while open */
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
 
-  /* ── Compute rows ─────────────────────────────────────────── */
+  /* ── Compute rows ──────────────────────────────────────── */
   const rows = useMemo(() => {
     if (!leftText && !rightText) return [];
     return buildRows(leftText.split("\n"), rightText.split("\n"), ignoreWS);
   }, [leftText, rightText, ignoreWS]);
 
-  /* ── Stats ─────────────────────────────────────────────────── */
+  /* ── Stats ─────────────────────────────────────────────── */
   const stats = useMemo(() => {
     let add = 0, del = 0, mod = 0, eq = 0;
     for (const r of rows) {
-      if (r.leftKind === "del")  del++;
-      else if (r.rightKind === "add") add++;
-      else if (r.leftKind === "mod") mod++;
-      else eq++;
+      if      (r.lKind === "del") del++;
+      else if (r.rKind === "add") add++;
+      else if (r.lKind === "mod") mod++;
+      else                        eq++;
     }
-    return { add, del, mod, eq, total: rows.length };
+    return { add, del, mod, eq };
   }, [rows]);
 
   const totalChunks = useMemo(() => {
     let max = -1;
-    for (const r of rows) if (r.chunkIdx > max) max = r.chunkIdx;
+    for (const r of rows) if (r.chunk > max) max = r.chunk;
     return max + 1;
   }, [rows]);
 
   const identical = stats.add === 0 && stats.del === 0 && stats.mod === 0 && rows.length > 0;
 
-  /* ── Navigate to chunk ─────────────────────────────────────── */
-  const goToChunk = useCallback((idx: number) => {
-    if (idx < 0 || idx >= totalChunks) return;
-    setChunkIdx(idx);
-    const rowIdx = rows.findIndex(r => r.chunkIdx === idx && r.isChunkStart);
-    if (rowIdx === -1) return;
-    const container = scrollRef.current;
-    if (!container) return;
-    container.scrollTop = rowIdx * ROW_H - 80;
+  /* ── Navigation ─────────────────────────────────────────── */
+  const goChunk = useCallback((idx: number) => {
+    if (totalChunks === 0) return;
+    const target = (idx + totalChunks) % totalChunks;
+    setChunk(target);
+    const rowIdx = rows.findIndex(r => r.chunk === target);
+    if (rowIdx < 0 || !scrollRef.current) return;
+    scrollRef.current.scrollTop = Math.max(0, rowIdx * ROW_H - 120);
   }, [rows, totalChunks]);
 
-  const prevChunk = () => goToChunk(chunkIdx <= 0 ? totalChunks - 1 : chunkIdx - 1);
-  const nextChunk = () => goToChunk(chunkIdx < totalChunks - 1 ? chunkIdx + 1 : 0);
-
-  /* ── File upload ───────────────────────────────────────────── */
-  function handleFileUpload(side: "left" | "right") {
+  /* ── File upload ─────────────────────────────────────────── */
+  function pickFile(side: "l" | "r") {
     const inp = document.createElement("input");
-    inp.type = "file"; inp.accept = ".txt,.md,.json,.csv,.ts,.tsx,.js,.jsx,.html,.css,.xml,.yaml,.yml,.log,.env";
+    inp.type = "file";
+    inp.accept = ".txt,.md,.json,.jsonc,.csv,.ts,.tsx,.js,.jsx,.mjs,.cjs,.html,.htm,.css,.scss,.xml,.yaml,.yml,.toml,.ini,.env,.log,.sh,.bat,.ps1,.sql,.php,.py,.rb,.go,.rs,.java,.cs,.cpp,.c,.h";
     inp.onchange = async () => {
-      const file = inp.files?.[0];
-      if (!file) return;
-      const text = await file.text();
-      if (side === "left") setLeftText(text);
-      else setRightText(text);
+      const f = inp.files?.[0]; if (!f) return;
+      const t = await f.text();
+      side === "l" ? setLeftText(t) : setRightText(t);
     };
     inp.click();
   }
 
-  /* ── Copy helpers ──────────────────────────────────────────── */
-  function copyLeft()  { navigator.clipboard.writeText(leftText).then(() => { setCopiedL(true); setTimeout(() => setCopiedL(false), 1800); }); }
-  function copyRight() { navigator.clipboard.writeText(rightText).then(() => { setCopiedR(true); setTimeout(() => setCopiedR(false), 1800); }); }
-
-  /* ── Swap ──────────────────────────────────────────────────── */
-  function swap() {
-    setLeftText(rightText);
-    setRightText(leftText);
-  }
+  function copyL() { navigator.clipboard.writeText(leftText).then(() => { setCopiedL(true); setTimeout(() => setCopiedL(false), 1800); }); }
+  function copyR() { navigator.clipboard.writeText(rightText).then(() => { setCopiedR(true); setTimeout(() => setCopiedR(false), 1800); }); }
+  function swap()  { const t = leftText; setLeftText(rightText); setRightText(t); }
 
   if (!mounted) return null;
 
-  /* ── Toolbar button style ──────────────────────────────────── */
-  const tbBtn = (active?: boolean): React.CSSProperties => ({
-    display: "inline-flex", alignItems: "center", gap: 4,
-    padding: "4px 10px", borderRadius: 6, fontSize: 12, fontWeight: 500, cursor: "pointer",
-    border: "1px solid",
-    borderColor: active ? "var(--nebula)" : "rgba(255,255,255,.12)",
-    background: active ? "rgba(108,99,255,.12)" : "rgba(255,255,255,.04)",
-    color: active ? "var(--halo)" : "var(--muted)",
-    transition: "all .15s",
+  /* ── Style helpers ───────────────────────────────────────── */
+  const pill = (active?: boolean): React.CSSProperties => ({
+    display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer",
+    padding: "3px 10px", borderRadius: 6, fontSize: 12, fontWeight: 500,
+    border: `1px solid ${active ? "rgba(139,92,246,.6)" : "rgba(255,255,255,.10)"}`,
+    background: active ? "rgba(139,92,246,.15)" : "rgba(255,255,255,.04)",
+    color: active ? "#c4b5fd" : "rgba(200,200,200,.75)",
+    transition: "all .12s",
+    userSelect: "none" as const,
   });
-
-  const iconBtn: React.CSSProperties = {
-    display: "inline-flex", alignItems: "center", justifyContent: "center",
-    width: 28, height: 28, borderRadius: 6, cursor: "pointer",
-    border: "1px solid rgba(255,255,255,.1)",
-    background: "rgba(255,255,255,.04)",
-    color: "var(--muted)",
-    transition: "all .15s",
+  const icon28: React.CSSProperties = {
+    display:"inline-flex",alignItems:"center",justifyContent:"center",
+    width:28,height:28,borderRadius:6,cursor:"pointer",
+    border:"1px solid rgba(255,255,255,.10)",
+    background:"rgba(255,255,255,.04)",
+    color:"rgba(200,200,200,.75)",
   };
 
+  /* ── Render ──────────────────────────────────────────────── */
   return createPortal(
-    <div
-      style={{
-        position: "fixed", inset: 0, zIndex: 60,
-        background: "var(--bg)",
-        display: "flex", flexDirection: "column",
-        fontFamily: "var(--font-sans, system-ui)",
-      }}
-    >
-      {/* ── Header ─────────────────────────────────────────── */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 10,
-        padding: "10px 16px",
-        borderBottom: "1px solid rgba(255,255,255,.08)",
-        background: "rgba(0,0,0,.25)",
-        flexShrink: 0,
-      }}>
-        {/* Close */}
-        <button onClick={onClose} style={iconBtn} title="Fermer">
-          <X size={15} />
-        </button>
+    <div style={{
+      position:"fixed", inset:0, zIndex:200,
+      display:"flex", flexDirection:"column",
+      background:"#0e0e14",
+      fontFamily:"system-ui, -apple-system, sans-serif",
+      overflow:"hidden",
+    }}>
 
-        {/* Title */}
-        <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", flex: 1 }}>
+      {/* ══ HEADER ═════════════════════════════════════════ */}
+      <div style={{
+        display:"flex", alignItems:"center", gap:8, flexShrink:0,
+        padding:"8px 14px",
+        borderBottom:"1px solid rgba(255,255,255,.08)",
+        background:"rgba(0,0,0,.30)",
+      }}>
+        <button onClick={onClose} style={icon28} title="Fermer"><X size={14}/></button>
+
+        <span style={{ fontSize:14, fontWeight:700, color:"#e8e8f0", marginRight:4 }}>
           Comparateur de texte
         </span>
 
+        {/* divider */}
+        <div style={{ width:1, height:18, background:"rgba(255,255,255,.10)", margin:"0 4px" }} />
+
         {/* View toggle */}
-        <div style={{ display: "flex", gap: 4 }}>
-          <button
-            onClick={() => setView("split")}
-            style={tbBtn(view === "split")}
-            title="Vue côte à côte"
-          >
-            <AlignLeft size={13} />
-            Côte à côte
-          </button>
-          <button
-            onClick={() => setView("edit")}
-            style={tbBtn(view === "edit")}
-            title="Mode édition"
-          >
-            <WrapText size={13} />
-            Édition
-          </button>
-        </div>
-
-        {/* Divider */}
-        <div style={{ width: 1, height: 20, background: "rgba(255,255,255,.1)" }} />
-
-        {/* Options */}
-        <button onClick={() => setIgnoreWS(v => !v)} style={tbBtn(ignoreWS)} title="Ignorer les espaces">
-          <CaseSensitive size={13} />
-          Ignorer espaces
+        <button onClick={() => setEditMode(false)} style={pill(!editMode)}>
+          <AlignLeft size={12}/> Vue diff
         </button>
-        <button onClick={() => setWordLevel(v => !v)} style={tbBtn(wordLevel)} title="Diff par mots">
-          Diff mots
-        </button>
-        <button onClick={() => setWrap(v => !v)} style={tbBtn(wrap)} title="Retour à la ligne">
-          <WrapText size={13} />
-          Retour ligne
+        <button onClick={() => setEditMode(true)} style={pill(editMode)}>
+          <WrapText size={12}/> Édition
         </button>
 
-        {/* Divider */}
-        <div style={{ width: 1, height: 20, background: "rgba(255,255,255,.1)" }} />
+        <div style={{ width:1, height:18, background:"rgba(255,255,255,.10)", margin:"0 4px" }} />
 
-        {/* Swap */}
-        <button onClick={swap} style={tbBtn()} title="Échanger les panneaux">
-          <ArrowLeftRight size={13} />
-          Échanger
+        <button onClick={() => setIgnoreWS(v=>!v)} style={pill(ignoreWS)}>Ignorer espaces</button>
+        <button onClick={() => setWordLevel(v=>!v)} style={pill(wordLevel)}>Diff mots</button>
+        <button onClick={() => setWrap(v=>!v)} style={pill(wrap)}>
+          <WrapText size={12}/> Retour ligne
         </button>
 
-        {/* Navigation */}
+        <div style={{ width:1, height:18, background:"rgba(255,255,255,.10)", margin:"0 4px" }} />
+
+        <button onClick={swap} style={pill()}>
+          <ArrowLeftRight size={12}/> Échanger
+        </button>
+
+        {/* Chunk navigation */}
         {totalChunks > 0 && (
           <>
-            <div style={{ width: 1, height: 20, background: "rgba(255,255,255,.1)" }} />
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <button onClick={prevChunk} style={iconBtn} title="Diff précédent">
-                <ChevronUp size={14} />
-              </button>
-              <span style={{ fontSize: 11, color: "var(--muted)", minWidth: 60, textAlign: "center" }}>
-                {chunkIdx >= 0 ? `${chunkIdx + 1} / ${totalChunks}` : `${totalChunks} diff${totalChunks > 1 ? "s" : ""}`}
-              </span>
-              <button onClick={nextChunk} style={iconBtn} title="Diff suivant">
-                <ChevronDown size={14} />
-              </button>
-            </div>
+            <div style={{ width:1, height:18, background:"rgba(255,255,255,.10)", margin:"0 4px" }} />
+            <button onClick={() => goChunk(chunk <= 0 ? totalChunks-1 : chunk-1)} style={icon28} title="Différence précédente">
+              <ChevronUp size={14}/>
+            </button>
+            <span style={{ fontSize:11, color:"rgba(190,190,210,.7)", minWidth:56, textAlign:"center" }}>
+              {chunk >= 0 ? `${chunk+1} / ${totalChunks}` : `${totalChunks} diff${totalChunks>1?"s":""}`}
+            </span>
+            <button onClick={() => goChunk(chunk+1)} style={icon28} title="Différence suivante">
+              <ChevronDown size={14}/>
+            </button>
           </>
         )}
+
+        <div style={{ flex:1 }}/>
       </div>
 
-      {/* ── Stats bar ─────────────────────────────────────────── */}
+      {/* ══ STATS BAR ══════════════════════════════════════ */}
       {rows.length > 0 && (
         <div style={{
-          display: "flex", alignItems: "center", gap: 16,
-          padding: "5px 16px",
-          borderBottom: "1px solid rgba(255,255,255,.06)",
-          background: "rgba(0,0,0,.15)",
-          fontSize: 11, flexShrink: 0,
+          display:"flex", alignItems:"center", gap:20, flexShrink:0,
+          padding:"4px 16px",
+          borderBottom:"1px solid rgba(255,255,255,.05)",
+          background:"rgba(0,0,0,.18)",
+          fontSize:11,
         }}>
           {identical ? (
-            <span style={{ color: "#4ade80", fontWeight: 600 }}>✓ Les deux textes sont identiques</span>
+            <span style={{ color:"#4ade80", fontWeight:700 }}>✓ Les deux textes sont identiques</span>
           ) : (
             <>
-              {stats.del > 0 && <span style={{ color: "#f87171" }}>−{stats.del} suppression{stats.del > 1 ? "s" : ""}</span>}
-              {stats.add > 0 && <span style={{ color: "#4ade80" }}>+{stats.add} ajout{stats.add > 1 ? "s" : ""}</span>}
-              {stats.mod > 0 && <span style={{ color: "#fb923c" }}>~{stats.mod} modification{stats.mod > 1 ? "s" : ""}</span>}
-              {stats.eq > 0  && <span style={{ color: "var(--muted)", opacity: .6 }}>{stats.eq} ligne{stats.eq > 1 ? "s" : ""} identique{stats.eq > 1 ? "s" : ""}</span>}
+              {stats.del > 0 && <span style={{ color:"#f87171" }}>−{stats.del} suppression{stats.del>1?"s":""}</span>}
+              {stats.add > 0 && <span style={{ color:"#4ade80" }}>+{stats.add} ajout{stats.add>1?"s":""}</span>}
+              {stats.mod > 0 && <span style={{ color:"#fb923c" }}>~{stats.mod} modification{stats.mod>1?"s":""}</span>}
+              {stats.eq  > 0 && <span style={{ color:"rgba(160,160,180,.5)" }}>{stats.eq} ligne{stats.eq>1?"s":""} identique{stats.eq>1?"s":""}</span>}
             </>
           )}
-          <span style={{ color: "var(--muted)", opacity: .4, marginLeft: "auto" }}>
-            {stats.total} ligne{stats.total > 1 ? "s" : ""}
-          </span>
+          <span style={{ color:"rgba(140,140,160,.4)", marginLeft:"auto" }}>{rows.length} lignes</span>
         </div>
       )}
 
-      {/* ── Body ──────────────────────────────────────────────── */}
-      {view === "edit" ? (
-        /* EDIT VIEW — two textareas side by side */
-        <div style={{ flex: 1, display: "flex", minHeight: 0, gap: 1, background: "rgba(255,255,255,.04)" }}>
-          {/* LEFT */}
-          <EditPanel
-            value={leftText}
-            onChange={setLeftText}
-            label="Texte A — original"
-            onUpload={() => handleFileUpload("left")}
-            onCopy={copyLeft}
-            copied={copiedL}
-            onClear={() => setLeftText("")}
-          />
-          {/* Divider */}
-          <div style={{ width: 1, background: "rgba(255,255,255,.08)", flexShrink: 0 }} />
-          {/* RIGHT */}
-          <EditPanel
-            value={rightText}
-            onChange={setRightText}
-            label="Texte B — modifié"
-            onUpload={() => handleFileUpload("right")}
-            onCopy={copyRight}
-            copied={copiedR}
-            onClear={() => setRightText("")}
-          />
+      {/* ══ BODY ═══════════════════════════════════════════ */}
+      {editMode ? (
+        /* ── EDIT MODE — two textareas ── */
+        <div style={{ flex:1, display:"flex", minHeight:0 }}>
+          <EditPane label="Texte A — original" value={leftText} onChange={setLeftText}
+            onUpload={()=>pickFile("l")} onCopy={copyL} copied={copiedL} onClear={()=>setLeftText("")}/>
+          <div style={{ width:1, background:"rgba(255,255,255,.08)", flexShrink:0 }}/>
+          <EditPane label="Texte B — modifié" value={rightText} onChange={setRightText}
+            onUpload={()=>pickFile("r")} onCopy={copyR} copied={copiedR} onClear={()=>setRightText("")}/>
         </div>
+      ) : rows.length === 0 ? (
+        /* ── EMPTY STATE ── */
+        <EmptyState onEdit={()=>setEditMode(true)} onUploadL={()=>pickFile("l")} onUploadR={()=>pickFile("r")}/>
       ) : (
-        /* SPLIT VIEW — diff table */
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-          {/* Panel headers */}
+        /* ── SPLIT DIFF VIEW ── */
+        <div style={{ flex:1, display:"flex", flexDirection:"column", minHeight:0 }}>
+
+          {/* Sticky panel labels */}
           <div style={{
-            display: "flex",
-            borderBottom: "1px solid rgba(255,255,255,.08)",
-            background: "rgba(0,0,0,.2)",
-            flexShrink: 0,
+            display:"grid",
+            gridTemplateColumns:`${NUM_W}px 1fr 1px ${NUM_W}px 1fr`,
+            flexShrink:0, height:28,
+            borderBottom:"1px solid rgba(255,255,255,.10)",
+            background:"rgba(0,0,0,.25)",
+            position:"sticky", top:0, zIndex:10,
           }}>
-            <PanelHeader
-              label="Texte A — original"
-              onUpload={() => handleFileUpload("left")}
-              onCopy={copyLeft}
-              copied={copiedL}
-              onClear={() => setLeftText("")}
-              onEdit={() => setView("edit")}
-              hasContent={!!leftText}
-            />
-            <div style={{ width: 1, background: "rgba(255,255,255,.08)", flexShrink: 0 }} />
-            <PanelHeader
-              label="Texte B — modifié"
-              onUpload={() => handleFileUpload("right")}
-              onCopy={copyRight}
-              copied={copiedR}
-              onClear={() => setRightText("")}
-              onEdit={() => setView("edit")}
-              hasContent={!!rightText}
-            />
+            <div style={{ gridColumn:"1/3", display:"flex", alignItems:"center", gap:8, padding:"0 8px 0 10px" }}>
+              <PanelActions onUpload={()=>pickFile("l")} onCopy={copyL} copied={copiedL} onClear={()=>setLeftText("")} onEdit={()=>setEditMode(true)} hasContent={!!leftText}/>
+              <span style={{ fontSize:10, fontWeight:700, letterSpacing:".08em", color:"rgba(180,180,200,.6)", textTransform:"uppercase" }}>Texte A — original</span>
+            </div>
+            <div style={{ width:1, background:DIVIDER }}/>
+            <div style={{ gridColumn:"4/6", display:"flex", alignItems:"center", gap:8, padding:"0 8px 0 10px" }}>
+              <PanelActions onUpload={()=>pickFile("r")} onCopy={copyR} copied={copiedR} onClear={()=>setRightText("")} onEdit={()=>setEditMode(true)} hasContent={!!rightText}/>
+              <span style={{ fontSize:10, fontWeight:700, letterSpacing:".08em", color:"rgba(180,180,200,.6)", textTransform:"uppercase" }}>Texte B — modifié</span>
+            </div>
           </div>
 
-          {/* Diff content or empty state */}
-          {!leftText && !rightText ? (
-            <EmptyState
-              onEditLeft={() => { setView("edit"); }}
-              onUploadLeft={() => handleFileUpload("left")}
-              onUploadRight={() => handleFileUpload("right")}
-            />
-          ) : (
-            <div
-              ref={scrollRef}
-              style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}
-            >
-              {rows.map((row, i) => (
-                <DiffRow key={i} row={row} wordLevel={wordLevel} wrap={wrap} />
-              ))}
+          {/* ── Single scroll container ── */}
+          <div
+            ref={scrollRef}
+            style={{ flex:1, overflow:"auto" }}
+          >
+            {/* Inner table — expands to content width */}
+            <div style={{ minWidth:"100%", display:"table" }}>
+              {rows.map((row, i) => {
+                /* backgrounds */
+                const lBg = row.lKind==="mod" ? MOD_L_BG : LINE_BG[row.lKind];
+                const rBg = row.rKind==="mod" ? MOD_R_BG : LINE_BG[row.rKind];
+                const lNumBg = NUM_BG[row.lKind];
+                const rNumBg = row.rKind==="mod" ? NUM_BG_MOD_R : NUM_BG[row.rKind];
+                const isChunkStart = row.chunk >= 0 && (i===0 || rows[i-1].chunk !== row.chunk);
+
+                return (
+                  <div key={i}
+                    data-chunk={row.chunk}
+                    style={{
+                      display:"grid",
+                      gridTemplateColumns:`${NUM_W}px 1fr 1px ${NUM_W}px 1fr`,
+                      minHeight: ROW_H,
+                      borderTop: isChunkStart && row.chunk >= 0 ? "1px solid rgba(255,255,255,.08)" : undefined,
+                      borderBottom:"1px solid rgba(255,255,255,.04)",
+                    }}
+                  >
+                    {/* ── Left num ── */}
+                    <div style={{
+                      background: lNumBg,
+                      display:"flex", alignItems:"center", justifyContent:"flex-end",
+                      paddingRight:8, paddingLeft:4,
+                      fontFamily:"ui-monospace,Consolas,monospace", fontSize:11,
+                      color: row.lKind==="del"||row.lKind==="mod" ? "rgba(248,113,113,.9)"
+                           : row.lKind==="blank" ? "transparent" : "rgba(150,150,170,.55)",
+                      userSelect:"none", flexShrink:0,
+                      borderRight:"1px solid rgba(255,255,255,.06)",
+                    }}>
+                      {row.lNum ?? ""}
+                    </div>
+
+                    {/* ── Left text ── */}
+                    <div style={{
+                      background: lBg,
+                      padding:`0 10px`,
+                      fontFamily:"ui-monospace,'Cascadia Code',Consolas,monospace",
+                      fontSize:12,
+                      lineHeight:`${ROW_H}px`,
+                      color: row.lKind==="blank" ? "transparent"
+                           : row.lKind==="eq" ? "rgba(210,210,230,.55)" : "#e8e8f0",
+                      whiteSpace: wrap ? "pre-wrap" : "pre",
+                      overflow: wrap ? "visible" : "hidden",
+                      wordBreak: wrap ? "break-all" : "normal",
+                      backgroundImage: row.lKind==="blank"
+                        ? "repeating-linear-gradient(135deg,rgba(255,255,255,.03) 0,rgba(255,255,255,.03) 1px,transparent 1px,transparent 9px)"
+                        : undefined,
+                    }}>
+                      {row.lText !== null && (
+                        <CellContent text={row.lText} kind={row.lKind} otherText={row.rText} wordLevel={wordLevel} isLeft={true}/>
+                      )}
+                    </div>
+
+                    {/* ── Center divider ── */}
+                    <div style={{ background: DIVIDER }}/>
+
+                    {/* ── Right num ── */}
+                    <div style={{
+                      background: rNumBg,
+                      display:"flex", alignItems:"center", justifyContent:"flex-end",
+                      paddingRight:8, paddingLeft:4,
+                      fontFamily:"ui-monospace,Consolas,monospace", fontSize:11,
+                      color: row.rKind==="add"||row.rKind==="mod" ? "rgba(74,222,128,.9)"
+                           : row.rKind==="blank" ? "transparent" : "rgba(150,150,170,.55)",
+                      userSelect:"none", flexShrink:0,
+                      borderRight:"1px solid rgba(255,255,255,.06)",
+                    }}>
+                      {row.rNum ?? ""}
+                    </div>
+
+                    {/* ── Right text ── */}
+                    <div style={{
+                      background: rBg,
+                      padding:`0 10px`,
+                      fontFamily:"ui-monospace,'Cascadia Code',Consolas,monospace",
+                      fontSize:12,
+                      lineHeight:`${ROW_H}px`,
+                      color: row.rKind==="blank" ? "transparent"
+                           : row.rKind==="eq" ? "rgba(210,210,230,.55)" : "#e8e8f0",
+                      whiteSpace: wrap ? "pre-wrap" : "pre",
+                      overflow: wrap ? "visible" : "hidden",
+                      wordBreak: wrap ? "break-all" : "normal",
+                      backgroundImage: row.rKind==="blank"
+                        ? "repeating-linear-gradient(135deg,rgba(255,255,255,.03) 0,rgba(255,255,255,.03) 1px,transparent 1px,transparent 9px)"
+                        : undefined,
+                    }}>
+                      {row.rText !== null && (
+                        <CellContent text={row.rText} kind={row.rKind} otherText={row.lText} wordLevel={wordLevel} isLeft={false}/>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>,
@@ -612,180 +516,126 @@ export default function DiffBuilder({ onClose }: Props) {
   );
 }
 
-/* ──────────────────────────────────────────────────────────────
-   PanelHeader
-────────────────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════
+   PanelActions — tiny icon buttons in the panel header
+════════════════════════════════════════════════════════════ */
 
-function PanelHeader({
-  label, onUpload, onCopy, copied, onClear, onEdit, hasContent,
-}: {
-  label: string;
-  onUpload: () => void;
-  onCopy: () => void;
-  copied: boolean;
-  onClear: () => void;
-  onEdit: () => void;
-  hasContent: boolean;
+function PanelActions({ onUpload, onCopy, copied, onClear, onEdit, hasContent }: {
+  onUpload:()=>void; onCopy:()=>void; copied:boolean;
+  onClear:()=>void; onEdit:()=>void; hasContent:boolean;
 }) {
-  const sm: React.CSSProperties = {
-    display: "inline-flex", alignItems: "center", justifyContent: "center",
-    width: 26, height: 26, borderRadius: 5, cursor: "pointer",
-    border: "1px solid rgba(255,255,255,.1)",
-    background: "rgba(255,255,255,.04)",
-    color: "var(--muted)",
+  const s: React.CSSProperties = {
+    display:"inline-flex",alignItems:"center",justifyContent:"center",
+    width:20,height:20,borderRadius:4,cursor:"pointer",
+    border:"1px solid rgba(255,255,255,.09)",
+    background:"rgba(255,255,255,.04)",
+    color:"rgba(190,190,210,.7)",
   };
   return (
-    <div style={{
-      flex: 1, display: "flex", alignItems: "center", gap: 6,
-      padding: "6px 10px",
-    }}>
-      <span style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", flex: 1, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-        {label}
-      </span>
-      <button onClick={onUpload} style={sm} title="Importer un fichier"><Upload size={12} /></button>
+    <div style={{ display:"flex", gap:3 }}>
+      <button onClick={onUpload} style={s} title="Importer un fichier"><Upload size={10}/></button>
       {hasContent && (
         <>
-          <button onClick={onEdit} style={sm} title="Éditer">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <button onClick={onEdit} style={s} title="Modifier">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
           </button>
-          <button onClick={onCopy} style={sm} title="Copier">
-            {copied ? <Check size={12} style={{ color: "#4ade80" }} /> : <Copy size={12} />}
+          <button onClick={onCopy} style={s} title="Copier">
+            {copied ? <Check size={10} style={{ color:"#4ade80" }}/> : <Copy size={10}/>}
           </button>
-          <button onClick={onClear} style={sm} title="Effacer">
-            <Trash2 size={12} />
-          </button>
+          <button onClick={onClear} style={s} title="Effacer"><Trash2 size={10}/></button>
         </>
       )}
     </div>
   );
 }
 
-/* ──────────────────────────────────────────────────────────────
-   EditPanel — textarea with header
-────────────────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════
+   EditPane — textarea panel
+════════════════════════════════════════════════════════════ */
 
-function EditPanel({
-  value, onChange, label, onUpload, onCopy, copied, onClear,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  label: string;
-  onUpload: () => void;
-  onCopy: () => void;
-  copied: boolean;
-  onClear: () => void;
+function EditPane({ label, value, onChange, onUpload, onCopy, copied, onClear }: {
+  label:string; value:string; onChange:(v:string)=>void;
+  onUpload:()=>void; onCopy:()=>void; copied:boolean; onClear:()=>void;
 }) {
-  const sm: React.CSSProperties = {
-    display: "inline-flex", alignItems: "center", justifyContent: "center",
-    width: 26, height: 26, borderRadius: 5, cursor: "pointer",
-    border: "1px solid rgba(255,255,255,.1)",
-    background: "rgba(255,255,255,.04)",
-    color: "var(--muted)",
+  const s: React.CSSProperties = {
+    display:"inline-flex",alignItems:"center",justifyContent:"center",
+    width:24,height:24,borderRadius:5,cursor:"pointer",
+    border:"1px solid rgba(255,255,255,.10)",
+    background:"rgba(255,255,255,.04)",
+    color:"rgba(190,190,210,.75)",
   };
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-      {/* header */}
+    <div style={{ flex:1, display:"flex", flexDirection:"column", minHeight:0 }}>
       <div style={{
-        display: "flex", alignItems: "center", gap: 6,
-        padding: "6px 10px",
-        borderBottom: "1px solid rgba(255,255,255,.08)",
-        background: "rgba(0,0,0,.2)",
-        flexShrink: 0,
+        display:"flex", alignItems:"center", gap:6, padding:"5px 10px", flexShrink:0,
+        borderBottom:"1px solid rgba(255,255,255,.07)",
+        background:"rgba(0,0,0,.20)",
       }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", flex: 1, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-          {label}
-        </span>
-        <button onClick={onUpload} style={sm} title="Importer un fichier"><Upload size={12} /></button>
-        {value && (
-          <>
-            <button onClick={onCopy} style={sm} title="Copier">
-              {copied ? <Check size={12} style={{ color: "#4ade80" }} /> : <Copy size={12} />}
-            </button>
-            <button onClick={onClear} style={sm} title="Effacer"><Trash2 size={12} /></button>
-          </>
-        )}
+        <span style={{ fontSize:10,fontWeight:700,letterSpacing:".08em",textTransform:"uppercase",color:"rgba(180,180,200,.6)",flex:1 }}>{label}</span>
+        <button onClick={onUpload} style={s} title="Importer"><Upload size={11}/></button>
+        {value && <>
+          <button onClick={onCopy} style={s} title="Copier">
+            {copied ? <Check size={11} style={{ color:"#4ade80" }}/> : <Copy size={11}/>}
+          </button>
+          <button onClick={onClear} style={s} title="Effacer"><Trash2 size={11}/></button>
+        </>}
       </div>
-      {/* textarea */}
       <textarea
-        value={value}
-        onChange={e => onChange(e.target.value)}
+        value={value} onChange={e=>onChange(e.target.value)}
         placeholder="Colle ton texte ici, ou importe un fichier…"
         spellCheck={false}
         style={{
-          flex: 1, resize: "none", outline: "none",
-          background: "rgba(255,255,255,.02)",
-          color: "var(--text)",
-          fontFamily: "ui-monospace, 'Cascadia Code', Consolas, monospace",
-          fontSize: 12, lineHeight: "20px",
-          padding: "12px 16px",
-          border: "none",
+          flex:1, resize:"none", outline:"none", border:"none",
+          background:"rgba(255,255,255,.015)",
+          color:"#d4d4e8",
+          fontFamily:"ui-monospace,'Cascadia Code',Consolas,monospace",
+          fontSize:12, lineHeight:"20px",
+          padding:"10px 14px",
         }}
       />
     </div>
   );
 }
 
-/* ──────────────────────────────────────────────────────────────
+/* ════════════════════════════════════════════════════════════
    EmptyState
-────────────────────────────────────────────────────────────── */
+════════════════════════════════════════════════════════════ */
 
-function EmptyState({
-  onEditLeft, onUploadLeft, onUploadRight,
-}: {
-  onEditLeft: () => void;
-  onUploadLeft: () => void;
-  onUploadRight: () => void;
+function EmptyState({ onEdit, onUploadL, onUploadR }: {
+  onEdit:()=>void; onUploadL:()=>void; onUploadR:()=>void;
 }) {
   return (
     <div style={{
-      flex: 1, display: "flex", flexDirection: "column",
-      alignItems: "center", justifyContent: "center",
-      gap: 16, color: "var(--muted)",
+      flex:1,display:"flex",flexDirection:"column",
+      alignItems:"center",justifyContent:"center",
+      gap:20,
     }}>
-      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: .25 }}>
+      <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="rgba(180,180,220,.2)" strokeWidth="1.2">
         <path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"/>
         <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
         <line x1="12" y1="3" x2="12" y2="21"/>
       </svg>
-      <p style={{ fontSize: 13, opacity: .5, textAlign: "center", maxWidth: 320 }}>
-        Colle ou importe deux textes pour comparer les différences
+      <p style={{ fontSize:13,color:"rgba(180,180,200,.45)",textAlign:"center",maxWidth:300,lineHeight:1.6 }}>
+        Colle ou importe deux textes pour visualiser les différences
       </p>
-      <div style={{ display: "flex", gap: 10 }}>
-        <button
-          onClick={onEditLeft}
-          style={{
-            padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer",
-            border: "1px solid var(--nebula)",
-            background: "rgba(108,99,255,.1)", color: "var(--halo)",
-          }}
-        >
-          Saisir du texte
-        </button>
-        <button
-          onClick={onUploadLeft}
-          style={{
-            padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer",
-            border: "1px solid rgba(255,255,255,.12)",
-            background: "rgba(255,255,255,.04)", color: "var(--muted)",
-          }}
-        >
-          <Upload size={12} style={{ display: "inline", marginRight: 4 }} />
-          Fichier A
-        </button>
-        <button
-          onClick={onUploadRight}
-          style={{
-            padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer",
-            border: "1px solid rgba(255,255,255,.12)",
-            background: "rgba(255,255,255,.04)", color: "var(--muted)",
-          }}
-        >
-          <Upload size={12} style={{ display: "inline", marginRight: 4 }} />
-          Fichier B
-        </button>
+      <div style={{ display:"flex", gap:10 }}>
+        <button onClick={onEdit} style={{
+          padding:"8px 18px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",
+          border:"1px solid rgba(139,92,246,.55)",background:"rgba(139,92,246,.15)",color:"#c4b5fd",
+        }}>Saisir du texte</button>
+        <button onClick={onUploadL} style={{
+          padding:"8px 14px",borderRadius:8,fontSize:12,fontWeight:500,cursor:"pointer",
+          border:"1px solid rgba(255,255,255,.12)",background:"rgba(255,255,255,.05)",color:"rgba(190,190,210,.8)",
+          display:"flex",alignItems:"center",gap:6,
+        }}><Upload size={12}/>Fichier A</button>
+        <button onClick={onUploadR} style={{
+          padding:"8px 14px",borderRadius:8,fontSize:12,fontWeight:500,cursor:"pointer",
+          border:"1px solid rgba(255,255,255,.12)",background:"rgba(255,255,255,.05)",color:"rgba(190,190,210,.8)",
+          display:"flex",alignItems:"center",gap:6,
+        }}><Upload size={12}/>Fichier B</button>
       </div>
     </div>
   );
