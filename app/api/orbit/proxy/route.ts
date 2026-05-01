@@ -3,18 +3,41 @@ import https from "node:https";
 import http from "node:http";
 
 /**
- * Server-side proxy for Orbit.
- * Uses Node.js http/https modules so we can:
- *   – bypass CORS (runs server-side)
- *   – bypass SSL certificate errors (rejectUnauthorized: false)
- *     which is acceptable for a local dev-tool proxy
+ * Server-side HTTP proxy for Orbit.
+ * – No CORS restrictions (Node.js)
+ * – rejectUnauthorized: false  → accepts self-signed / expired certs
+ * – minVersion: 'TLSv1'        → supports legacy TLS 1.0/1.1 servers
+ * – secureOptions               → enables old cipher suites
+ * – Explicit Content-Length    → compatible with servers that reject
+ *                                 chunked transfer encoding (e.g. ASP.NET)
  */
 export const runtime = "nodejs";
 
-// One global agent per protocol — rejectUnauthorized:false lets us reach
-// self-signed or expired-cert servers just like Postman / Insomnia do.
-const httpsAgent = new https.Agent({ rejectUnauthorized: false });
-const httpAgent  = new http.Agent();
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: false,
+  // Allow old TLS versions that some corporate/legacy servers still use
+  minVersion: "TLSv1" as any,
+  // Keep legacy cipher suites available
+  ciphers: [
+    "TLS_AES_128_GCM_SHA256",
+    "TLS_AES_256_GCM_SHA384",
+    "ECDHE-RSA-AES128-GCM-SHA256",
+    "ECDHE-RSA-AES256-GCM-SHA384",
+    "ECDHE-RSA-AES128-SHA256",
+    "ECDHE-RSA-AES256-SHA384",
+    "ECDHE-RSA-AES128-SHA",
+    "ECDHE-RSA-AES256-SHA",
+    "AES128-GCM-SHA256",
+    "AES256-GCM-SHA384",
+    "AES128-SHA256",
+    "AES256-SHA256",
+    "AES128-SHA",
+    "AES256-SHA",
+    "DES-CBC3-SHA",
+  ].join(":"),
+});
+
+const httpAgent = new http.Agent();
 
 export async function POST(req: NextRequest) {
   let payload: {
@@ -44,17 +67,32 @@ export async function POST(req: NextRequest) {
       return;
     }
 
-    const isHttps  = parsed.protocol === "https:";
-    const agent    = isHttps ? httpsAgent : httpAgent;
-    const port     = parsed.port ? parseInt(parsed.port) : (isHttps ? 443 : 80);
-    const path     = parsed.pathname + parsed.search;
+    const isHttps = parsed.protocol === "https:";
+    const agent   = isHttps ? httpsAgent : httpAgent;
+    const port    = parsed.port ? parseInt(parsed.port) : (isHttps ? 443 : 80);
+    const path    = parsed.pathname + parsed.search;
 
-    // Remove host/content-length — Node will set them correctly
+    // Build clean headers — Node sets Host + Content-Length itself
     const cleanHeaders: Record<string, string> = {};
     for (const [k, v] of Object.entries(headers)) {
-      if (!["host", "content-length"].includes(k.toLowerCase())) {
+      if (!["host", "content-length", "transfer-encoding"].includes(k.toLowerCase())) {
         cleanHeaders[k] = v;
       }
+    }
+
+    // Always send a User-Agent so servers don't reject the request
+    if (!cleanHeaders["user-agent"] && !cleanHeaders["User-Agent"]) {
+      cleanHeaders["user-agent"] = "Orbit/1.0 (HTTP client)";
+    }
+
+    // Set explicit Content-Length for POST/PUT/PATCH — many old servers
+    // (including ASP.NET .aspx endpoints) reject chunked transfer encoding
+    const bodyBuf = (body && !["GET", "HEAD"].includes(method.toUpperCase()))
+      ? Buffer.from(body, "utf8")
+      : null;
+
+    if (bodyBuf) {
+      cleanHeaders["content-length"] = String(bodyBuf.byteLength);
     }
 
     const options: https.RequestOptions = {
@@ -68,10 +106,13 @@ export async function POST(req: NextRequest) {
 
     const client = isHttps ? https : http;
 
-    const proxyReq = client.request(options, (upstream) => {
+    const proxyReq = (client as typeof https).request(options, (upstream) => {
       const chunks: Buffer[] = [];
 
-      upstream.on("data", (chunk: Buffer) => chunks.push(chunk));
+      upstream.on("data",  (chunk: Buffer) => chunks.push(chunk));
+      upstream.on("error", (e) => {
+        resolve(NextResponse.json({ error: `Stream error: ${e.message}` }, { status: 502 }));
+      });
       upstream.on("end", () => {
         const rawBody  = Buffer.concat(chunks);
         const bodyText = rawBody.toString("utf8");
@@ -84,7 +125,7 @@ export async function POST(req: NextRequest) {
 
         resolve(
           NextResponse.json({
-            status:     upstream.statusCode  ?? 0,
+            status:     upstream.statusCode   ?? 0,
             statusText: upstream.statusMessage ?? "",
             headers:    resHeaders,
             body:       bodyText,
@@ -96,23 +137,26 @@ export async function POST(req: NextRequest) {
     });
 
     proxyReq.on("error", (e: NodeJS.ErrnoException) => {
+      const code = e.code ?? "UNKNOWN";
       const msg =
-        e.code === "ECONNREFUSED"  ? `Connection refused — is the server running? (${url})` :
-        e.code === "ENOTFOUND"     ? `Host not found: ${parsed.hostname}` :
-        e.code === "ECONNRESET"    ? `Connection reset by remote server` :
-        e.code === "ETIMEDOUT"     ? `Request timed out` :
-        e.message;
+        code === "ECONNREFUSED"  ? `Connection refused — server not reachable at ${parsed.host}` :
+        code === "ENOTFOUND"     ? `DNS lookup failed: host "${parsed.hostname}" not found` :
+        code === "ECONNRESET"    ? `Connection reset by remote server` :
+        code === "ETIMEDOUT"     ? `Connection timed out` :
+        code === "EPROTO"        ? `TLS/SSL protocol error (${e.message})` :
+        code === "DEPTH_ZERO_SELF_SIGNED_CERT" ? `Self-signed certificate rejected` :
+        `${code}: ${e.message}`;
 
       resolve(NextResponse.json({ error: msg }, { status: 502 }));
     });
 
     proxyReq.setTimeout(30_000, () => {
       proxyReq.destroy();
-      resolve(NextResponse.json({ error: "Request timed out after 30s" }, { status: 504 }));
+      resolve(NextResponse.json({ error: "Request timed out after 30 s" }, { status: 504 }));
     });
 
-    if (body && !["GET", "HEAD"].includes(method.toUpperCase())) {
-      proxyReq.write(body);
+    if (bodyBuf) {
+      proxyReq.write(bodyBuf);
     }
 
     proxyReq.end();

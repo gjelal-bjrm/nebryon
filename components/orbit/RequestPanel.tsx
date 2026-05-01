@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Send, Save, ChevronDown } from "lucide-react";
+import { Send, Save, ChevronDown, Copy, Check } from "lucide-react";
 import dynamic from "next/dynamic";
 import KVEditor from "./KVEditor";
 import type { OrbitRequest, ReqTab, Method } from "@/lib/orbit/types";
@@ -15,10 +15,10 @@ const METHOD_COLORS: Record<Method, string> = {
 };
 
 const TABS: { id: ReqTab; label: string }[] = [
-  { id: "params",  label: "Params"    },
-  { id: "headers", label: "En-têtes"  },
-  { id: "body",    label: "Corps"     },
-  { id: "auth",    label: "Auth"      },
+  { id: "params",  label: "Params"  },
+  { id: "headers", label: "Headers" },
+  { id: "body",    label: "Body"    },
+  { id: "auth",    label: "Auth"    },
 ];
 
 interface Props {
@@ -32,8 +32,10 @@ interface Props {
 export default function RequestPanel({ req, onChange, onSend, onSave, sending }: Props) {
   const [tab, setTab] = useState<ReqTab>("params");
   const [methodOpen, setMethodOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  const set = <K extends keyof OrbitRequest>(k: K, v: OrbitRequest[K]) => onChange({ ...req, [k]: v });
+  const set = <K extends keyof OrbitRequest>(k: K, v: OrbitRequest[K]) =>
+    onChange({ ...req, [k]: v });
 
   const tabBadge = (t: ReqTab) => {
     if (t === "params")  return req.params.filter(p => p.enabled && p.key).length || null;
@@ -43,11 +45,19 @@ export default function RequestPanel({ req, onChange, onSend, onSave, sending }:
     return null;
   };
 
+  const copyBody = async () => {
+    try {
+      await navigator.clipboard.writeText(req.body.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* silent */ }
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* URL bar */}
       <div className="flex gap-2 p-3 flex-shrink-0" style={{ borderBottom: "1px solid var(--stroke)" }}>
-        {/* Method */}
+        {/* Method dropdown */}
         <div className="relative flex-shrink-0">
           <button
             onClick={() => setMethodOpen(o => !o)}
@@ -57,12 +67,17 @@ export default function RequestPanel({ req, onChange, onSend, onSave, sending }:
             {req.method} <ChevronDown size={12} />
           </button>
           {methodOpen && (
-            <div className="absolute top-full left-0 mt-1 z-50 rounded-xl overflow-hidden shadow-lg"
-              style={{ border: "1px solid var(--stroke)", background: "var(--nav-bg)", minWidth: "120px" }}>
+            <div
+              className="absolute top-full left-0 mt-1 z-50 rounded-xl overflow-hidden shadow-lg"
+              style={{ border: "1px solid var(--stroke)", background: "var(--nav-bg)", minWidth: "120px" }}
+            >
               {METHODS.map(m => (
-                <button key={m} onClick={() => { set("method", m); setMethodOpen(false); }}
+                <button
+                  key={m}
+                  onClick={() => { set("method", m); setMethodOpen(false); }}
                   className="flex items-center w-full px-3 py-2 text-xs font-bold transition hover:opacity-80"
-                  style={{ color: METHOD_COLORS[m], background: m === req.method ? "rgba(108,99,255,.1)" : "transparent" }}>
+                  style={{ color: METHOD_COLORS[m], background: m === req.method ? "rgba(108,99,255,.1)" : "transparent" }}
+                >
                   {m}
                 </button>
               ))}
@@ -80,29 +95,31 @@ export default function RequestPanel({ req, onChange, onSend, onSave, sending }:
           style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.03)", color: "var(--text)" }}
         />
 
-        {/* Buttons */}
+        {/* Save */}
         <button
           onClick={onSave}
           className="flex items-center gap-1.5 rounded-lg px-3 h-9 text-xs transition hover:opacity-80"
           style={{ border: "1px solid var(--stroke)", color: "var(--muted)" }}
-          title="Sauvegarder dans une collection"
+          title="Save to collection"
         >
           <Save size={14} />
         </button>
+
+        {/* Send */}
         <button
           onClick={onSend}
           disabled={sending || !req.url.trim()}
           className="flex items-center gap-1.5 rounded-lg px-4 h-9 text-xs font-semibold transition hover:opacity-85 disabled:opacity-40"
           style={{ background: "linear-gradient(135deg,var(--nebula),var(--indigo))", color: "#fff" }}
         >
-          <Send size={13} /> {sending ? "Envoi…" : "Envoyer"}
+          <Send size={13} /> {sending ? "Sending…" : "Send"}
         </button>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-0 flex-shrink-0 px-3 pt-2" style={{ borderBottom: "1px solid var(--stroke)" }}>
         {TABS.map(t => {
-          const badge = tabBadge(t.id);
+          const badge  = tabBadge(t.id);
           const active = tab === t.id;
           return (
             <button
@@ -130,26 +147,45 @@ export default function RequestPanel({ req, onChange, onSend, onSave, sending }:
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto p-3">
         {tab === "params" && (
-          <KVEditor pairs={req.params} onChange={(p) => set("params", p)} keyPlaceholder="Paramètre" />
+          <KVEditor pairs={req.params} onChange={(p) => set("params", p)} keyPlaceholder="Parameter" />
         )}
 
         {tab === "headers" && (
-          <KVEditor pairs={req.headers} onChange={(h) => set("headers", h)} keyPlaceholder="En-tête" />
+          <KVEditor pairs={req.headers} onChange={(h) => set("headers", h)} keyPlaceholder="Header" />
         )}
 
         {tab === "body" && (
           <div className="flex flex-col gap-3">
-            <div className="flex gap-2">
-              {(["none", "json", "form-data", "raw"] as const).map(t => (
-                <button key={t} onClick={() => set("body", { ...req.body, type: t })}
-                  className="rounded-full px-3 py-1 text-xs transition"
-                  style={req.body.type === t
-                    ? { border: "1px solid var(--nebula)", background: "rgba(108,99,255,.12)", color: "var(--halo)" }
-                    : { border: "1px solid var(--stroke)", color: "var(--muted)" }}>
-                  {t === "none" ? "Aucun" : t === "form-data" ? "Form Data" : t === "raw" ? "Texte brut" : "JSON"}
+            {/* Body type selector + copy button */}
+            <div className="flex items-center justify-between">
+              <div className="flex gap-2">
+                {(["none", "json", "form-data", "raw"] as const).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => set("body", { ...req.body, type: t })}
+                    className="rounded-full px-3 py-1 text-xs transition"
+                    style={req.body.type === t
+                      ? { border: "1px solid var(--nebula)", background: "rgba(108,99,255,.12)", color: "var(--halo)" }
+                      : { border: "1px solid var(--stroke)", color: "var(--muted)" }}
+                  >
+                    {t === "none" ? "None" : t === "form-data" ? "Form Data" : t === "raw" ? "Raw" : "JSON"}
+                  </button>
+                ))}
+              </div>
+
+              {req.body.type !== "none" && req.body.content && (
+                <button
+                  onClick={copyBody}
+                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] transition hover:opacity-80"
+                  style={{ border: "1px solid var(--stroke)", color: copied ? "var(--nebula)" : "var(--muted)" }}
+                  title="Copy body"
+                >
+                  {copied ? <Check size={11} /> : <Copy size={11} />}
+                  {copied ? "Copied!" : "Copy"}
                 </button>
-              ))}
+              )}
             </div>
+
             {req.body.type !== "none" && (
               <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--stroke)" }}>
                 <CodeEditor
@@ -170,23 +206,33 @@ export default function RequestPanel({ req, onChange, onSend, onSave, sending }:
 }
 
 /* ── Auth tab ────────────────────────────────────────────── */
-function AuthTab({ auth, onChange }: { auth: OrbitRequest["auth"]; onChange: (a: OrbitRequest["auth"]) => void }) {
-  const set = <K extends keyof typeof auth>(k: K, v: (typeof auth)[K]) => onChange({ ...auth, [k]: v });
+function AuthTab({
+  auth,
+  onChange,
+}: {
+  auth: OrbitRequest["auth"];
+  onChange: (a: OrbitRequest["auth"]) => void;
+}) {
+  const set = <K extends keyof typeof auth>(k: K, v: (typeof auth)[K]) =>
+    onChange({ ...auth, [k]: v });
 
-  const inputCls = "w-full rounded-lg px-3 py-2 text-xs focus:outline-none";
+  const inputCls   = "w-full rounded-lg px-3 py-2 text-xs focus:outline-none";
   const inputStyle = { border: "1px solid var(--stroke)", background: "rgba(255,255,255,.03)", color: "var(--text)" };
-  const label = "text-[11px] mb-1 block";
+  const label      = "text-[11px] mb-1 block";
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex gap-2">
         {(["none", "bearer", "basic", "apikey"] as const).map(t => (
-          <button key={t} onClick={() => set("type", t)}
-            className="rounded-full px-3 py-1 text-xs transition capitalize"
+          <button
+            key={t}
+            onClick={() => set("type", t)}
+            className="rounded-full px-3 py-1 text-xs transition"
             style={auth.type === t
               ? { border: "1px solid var(--nebula)", background: "rgba(108,99,255,.12)", color: "var(--halo)" }
-              : { border: "1px solid var(--stroke)", color: "var(--muted)" }}>
-            {t === "none" ? "Aucune" : t === "bearer" ? "Bearer Token" : t === "basic" ? "Basic Auth" : "API Key"}
+              : { border: "1px solid var(--stroke)", color: "var(--muted)" }}
+          >
+            {t === "none" ? "None" : t === "bearer" ? "Bearer Token" : t === "basic" ? "Basic Auth" : "API Key"}
           </button>
         ))}
       </div>
@@ -194,22 +240,25 @@ function AuthTab({ auth, onChange }: { auth: OrbitRequest["auth"]; onChange: (a:
       {auth.type === "bearer" && (
         <div>
           <label className={label} style={{ color: "var(--muted)" }}>Token</label>
-          <input value={auth.bearer} onChange={(e) => set("bearer", e.target.value)}
-            placeholder="eyJhbGci..." className={inputCls} style={inputStyle} />
+          <input
+            value={auth.bearer}
+            onChange={(e) => set("bearer", e.target.value)}
+            placeholder="eyJhbGci…"
+            className={inputCls}
+            style={inputStyle}
+          />
         </div>
       )}
 
       {auth.type === "basic" && (
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={label} style={{ color: "var(--muted)" }}>Utilisateur</label>
-            <input value={auth.basicUser} onChange={(e) => set("basicUser", e.target.value)}
-              className={inputCls} style={inputStyle} />
+            <label className={label} style={{ color: "var(--muted)" }}>Username</label>
+            <input value={auth.basicUser} onChange={(e) => set("basicUser", e.target.value)} className={inputCls} style={inputStyle} />
           </div>
           <div>
-            <label className={label} style={{ color: "var(--muted)" }}>Mot de passe</label>
-            <input type="password" value={auth.basicPass} onChange={(e) => set("basicPass", e.target.value)}
-              className={inputCls} style={inputStyle} />
+            <label className={label} style={{ color: "var(--muted)" }}>Password</label>
+            <input type="password" value={auth.basicPass} onChange={(e) => set("basicPass", e.target.value)} className={inputCls} style={inputStyle} />
           </div>
         </div>
       )}
@@ -218,24 +267,25 @@ function AuthTab({ auth, onChange }: { auth: OrbitRequest["auth"]; onChange: (a:
         <div className="flex flex-col gap-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={label} style={{ color: "var(--muted)" }}>Nom de la clé</label>
-              <input value={auth.apiKeyName} onChange={(e) => set("apiKeyName", e.target.value)}
-                className={inputCls} style={inputStyle} />
+              <label className={label} style={{ color: "var(--muted)" }}>Key name</label>
+              <input value={auth.apiKeyName} onChange={(e) => set("apiKeyName", e.target.value)} className={inputCls} style={inputStyle} />
             </div>
             <div>
-              <label className={label} style={{ color: "var(--muted)" }}>Valeur</label>
-              <input value={auth.apiKeyValue} onChange={(e) => set("apiKeyValue", e.target.value)}
-                className={inputCls} style={inputStyle} />
+              <label className={label} style={{ color: "var(--muted)" }}>Value</label>
+              <input value={auth.apiKeyValue} onChange={(e) => set("apiKeyValue", e.target.value)} className={inputCls} style={inputStyle} />
             </div>
           </div>
           <div className="flex gap-2">
             {(["header", "query"] as const).map(loc => (
-              <button key={loc} onClick={() => set("apiKeyIn", loc)}
+              <button
+                key={loc}
+                onClick={() => set("apiKeyIn", loc)}
                 className="rounded-full px-3 py-1 text-xs transition capitalize"
                 style={auth.apiKeyIn === loc
                   ? { border: "1px solid var(--nebula)", background: "rgba(108,99,255,.12)", color: "var(--halo)" }
-                  : { border: "1px solid var(--stroke)", color: "var(--muted)" }}>
-                {loc === "header" ? "En-tête" : "Query Param"}
+                  : { border: "1px solid var(--stroke)", color: "var(--muted)" }}
+              >
+                {loc === "header" ? "Header" : "Query Param"}
               </button>
             ))}
           </div>
@@ -243,7 +293,7 @@ function AuthTab({ auth, onChange }: { auth: OrbitRequest["auth"]; onChange: (a:
       )}
 
       {auth.type === "none" && (
-        <p className="text-xs" style={{ color: "var(--muted)" }}>Aucune authentification pour cette requête.</p>
+        <p className="text-xs" style={{ color: "var(--muted)" }}>No authentication for this request.</p>
       )}
     </div>
   );
