@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { Sun, Moon, User } from "lucide-react";
 import { db } from "@/lib/orbit/db";
+import { NAV } from "@/lib/shared/nav";
 import OrbitLogo from "./OrbitLogo";
 
 interface Props {
@@ -35,6 +36,9 @@ export default function OrbitTopbar({ onOpenProfile }: Props) {
   const profile = useLiveQuery(() => db.profile.get("singleton"), []);
   const initial = profile?.firstName?.[0] ?? profile?.email?.[0] ?? null;
 
+  const [pathname, setPathname] = useState("");
+  useEffect(() => { setPathname(window.location.pathname); }, []);
+
   return (
     <div
       className="flex items-center justify-between px-3 h-10 flex-shrink-0"
@@ -61,6 +65,28 @@ export default function OrbitTopbar({ onOpenProfile }: Props) {
           ORBIT
         </span>
       </div>
+
+      {/* Center — nav links */}
+      <nav className="hidden sm:flex items-center gap-1">
+        {NAV.map((item) => {
+          const isApp   = !item.href.startsWith("#");
+          const isCurrent = isApp && pathname === item.href;
+          return (
+            <a
+              key={item.href}
+              href={item.href}
+              className="px-2.5 py-1 rounded-lg text-xs transition"
+              style={isCurrent
+                ? { border: "1px solid var(--nebula)", background: "rgba(108,99,255,.1)", color: "var(--halo)" }
+                : { color: "var(--muted)" }}
+              onMouseEnter={(e) => { if (!isCurrent) (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
+              onMouseLeave={(e) => { if (!isCurrent) (e.currentTarget as HTMLElement).style.color = "var(--muted)"; }}
+            >
+              {item.label}
+            </a>
+          );
+        })}
+      </nav>
 
       {/* Right — theme + profile */}
       <div className="flex items-center gap-1.5">
