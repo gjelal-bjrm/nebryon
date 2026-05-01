@@ -137,7 +137,7 @@ export default function ResponsePanel({ response, loading, error }: Props) {
       {/* Content */}
       <div className="flex-1 overflow-hidden">
         {tab === "body" && (
-          <div className="h-full overflow-hidden">
+          <div className="h-full">
             <CodeEditor
               value={bodyContent}
               readOnly
