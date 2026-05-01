@@ -423,6 +423,43 @@ const ANDROID_SIZES = [
   { label: 'Play Store Icon',   w: 512,  h: 512  },
 ];
 
+const CUSTOM_PRESETS: { group: string; items: { label: string; w: number; h: number }[] }[] = [
+  {
+    group: "Impression (300 dpi)",
+    items: [
+      { label: "A6",      w: 1240, h: 1748 },
+      { label: "A5",      w: 1748, h: 2480 },
+      { label: "A4",      w: 2480, h: 3508 },
+      { label: "A4 pay.", w: 3508, h: 2480 },
+      { label: "A3",      w: 3508, h: 4961 },
+      { label: "Letter",  w: 2550, h: 3300 },
+    ],
+  },
+  {
+    group: "Réseaux sociaux",
+    items: [
+      { label: "Instagram carré",   w: 1080, h: 1080 },
+      { label: "Instagram portrait",w: 1080, h: 1350 },
+      { label: "Story / Reel",      w: 1080, h: 1920 },
+      { label: "Facebook post",     w: 1200, h: 630  },
+      { label: "Twitter / X",       w: 1600, h: 900  },
+      { label: "LinkedIn post",     w: 1200, h: 627  },
+      { label: "YouTube thumbnail", w: 1280, h: 720  },
+    ],
+  },
+  {
+    group: "Écrans",
+    items: [
+      { label: "HD 720p",   w: 1280, h: 720  },
+      { label: "Full HD",   w: 1920, h: 1080 },
+      { label: "2K",        w: 2560, h: 1440 },
+      { label: "4K UHD",    w: 3840, h: 2160 },
+      { label: "Icône 512", w: 512,  h: 512  },
+      { label: "Favicon",   w: 64,   h: 64   },
+    ],
+  },
+];
+
 function ResizeTool() {
   const [subMode, setSubMode] = useState<ResizeSubMode>("custom");
   const [w, setW] = useState(1290);
@@ -478,15 +515,34 @@ function ResizeTool() {
         </div>
       )}
       {subMode === "custom" && (
-        <div className="grid grid-cols-2 gap-3">
-          {[["Largeur (px)", w, setW],["Hauteur (px)", h, setH]].map(([label, val, setter]) => (
-            <div key={label as string}>
-              <label className="mb-1 block text-[11px]" style={{ color:"var(--muted)" }}>{label as string}</label>
-              <input type="number" value={val as number} onChange={(e) => (setter as any)(+e.target.value)}
-                className="w-full rounded-xl px-3 py-2 text-sm text-white focus:outline-none"
-                style={{ border:"1px solid var(--stroke)", background:"rgba(255,255,255,.04)" }} />
+        <div className="flex flex-col gap-4">
+          {CUSTOM_PRESETS.map((group) => (
+            <div key={group.group}>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color:"var(--muted)" }}>{group.group}</p>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {group.items.map((s) => (
+                  <button key={s.label} onClick={() => { setW(s.w); setH(s.h); setSelectedPreset(s.label); }}
+                    className="rounded-xl p-2.5 text-left text-xs transition-all"
+                    style={selectedPreset === s.label
+                      ? { border:"1px solid var(--nebula)", background:"rgba(108,99,255,.10)", color:"var(--text)" }
+                      : { border:"1px solid var(--stroke)", background:"rgba(255,255,255,.02)", color:"var(--muted)" }}>
+                    <span className="block font-semibold mb-0.5" style={{ color: selectedPreset === s.label ? "var(--halo)" : "var(--nebula)" }}>{s.label}</span>
+                    <span className="text-[10px]">{s.w} × {s.h}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           ))}
+          <div className="grid grid-cols-2 gap-3">
+            {([["Largeur (px)", w, setW],["Hauteur (px)", h, setH]] as [string, number, (v: number) => void][]).map(([label, val, setter]) => (
+              <div key={label}>
+                <label className="mb-1 block text-[11px]" style={{ color:"var(--muted)" }}>{label}</label>
+                <input type="number" value={val} onChange={(e) => setter(+e.target.value)}
+                  className="w-full rounded-xl px-3 py-2 text-sm focus:outline-none"
+                  style={{ border:"1px solid var(--stroke)", background:"rgba(255,255,255,.04)", color:"var(--text)" }} />
+              </div>
+            ))}
+          </div>
         </div>
       )}
       <div className="flex flex-wrap items-center gap-3">
