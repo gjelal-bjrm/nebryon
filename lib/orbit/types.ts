@@ -87,11 +87,12 @@ export interface Profile {
   email: string;
   photo: string;
   bio: string;
+  birthdate: string; // YYYY-MM-DD, empty string if not set
   updatedAt: number;
 }
 
 export function defaultProfile(): Profile {
-  return { id: "singleton", firstName: "", lastName: "", email: "", photo: "", bio: "", updatedAt: Date.now() };
+  return { id: "singleton", firstName: "", lastName: "", email: "", photo: "", bio: "", birthdate: "", updatedAt: Date.now() };
 }
 
 /* ── Backup ─────────────────────────────────────────────── */

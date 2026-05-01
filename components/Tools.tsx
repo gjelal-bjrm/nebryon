@@ -24,10 +24,14 @@ import {
   Copy,
   Check,
   Key,
+  Clock,
+  Maximize2,
+  Minimize2,
+  MapPin,
 } from "lucide-react";
 
 /* ── Types ─────────────────────────────────────────────── */
-type ToolId = "resize" | "merge" | "extract" | "convert" | "password" | "tva" | "date" | "units" | "base64" | "meta" | "qrcode";
+type ToolId = "resize" | "merge" | "extract" | "convert" | "password" | "tva" | "date" | "units" | "base64" | "meta" | "qrcode" | "clock";
 
 interface Tool {
   id: ToolId;
@@ -50,6 +54,7 @@ const TOOLS: Tool[] = [
   { id: "meta",     icon: <ScanSearch size={18} />,     title: "Inspecteur de fichier",      desc: "Dimensions, taille, format, ratio d'une image ou d'un PDF.",                         badge: "Dev" },
   { id: "tva",      icon: <Receipt size={18} />,        title: "Calculateur TVA",            desc: "Calcule HT ↔ TTC selon le taux de ton pays (CH, FR, BE…).",                          badge: "Finance" },
   { id: "units",    icon: <Ruler size={18} />,          title: "Convertisseur d'unités",     desc: "Longueur, masse, température, surface — km/miles, kg/lbs, °C/°F…",                   badge: "Quotidien" },
+  { id: "clock",    icon: <Clock size={18} />,          title: "Horloge",                    desc: "Affichage de l'heure en grand, personnalisable — idéal pour les examens ou réunions.", badge: "Quotidien" },
 ];
 
 /* ── Helpers ────────────────────────────────────────────── */
@@ -1276,6 +1281,208 @@ function MetaTool() {
   );
 }
 
+/* ── CLOCK ──────────────────────────────────────────────── */
+
+const CLOCK_COLORS = {
+  nebula: { name: "Nébula",  hex: "#6C63FF", glow: "rgba(108,99,255,.55)" },
+  orbit:  { name: "Orbit",   hex: "#3B9EFF", glow: "rgba(59,158,255,.55)"  },
+  teal:   { name: "Teal",    hex: "#2DD4BF", glow: "rgba(45,212,191,.55)"  },
+  coral:  { name: "Corail",  hex: "#F97316", glow: "rgba(249,115,22,.55)"  },
+  gold:   { name: "Or",      hex: "#FBBF24", glow: "rgba(251,191,36,.55)"  },
+  snow:   { name: "Blanc",   hex: "#F1F5F9", glow: "rgba(241,245,249,.35)" },
+} as const;
+
+type ClockColorKey = keyof typeof CLOCK_COLORS;
+
+function ClockTool() {
+  const [now, setNow]             = useState(new Date());
+  const [showSec, setShowSec]     = useState(true);
+  const [colorKey, setColorKey]   = useState<ClockColorKey>("nebula");
+  const [city, setCity]           = useState("");
+  const [editingCity, setEditingCity] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const clockRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const h = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", h);
+    return () => document.removeEventListener("fullscreenchange", h);
+  }, []);
+
+  const c = CLOCK_COLORS[colorKey];
+
+  const timeStr = now.toLocaleTimeString("fr", {
+    hour: "2-digit",
+    minute: "2-digit",
+    ...(showSec ? { second: "2-digit" } : {}),
+  });
+
+  const dateStr = (() => {
+    const d = now.toLocaleDateString("fr", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    return d.charAt(0).toUpperCase() + d.slice(1);
+  })();
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      clockRef.current?.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  };
+
+  const tabSty = (active: boolean) => ({
+    border: active ? `1px solid ${c.hex}` : "1px solid var(--stroke)",
+    background: active ? `${c.hex}1A` : "transparent",
+    color: active ? c.hex : "var(--muted)",
+  } as React.CSSProperties);
+
+  return (
+    <div className="space-y-4">
+      {/* Controls — hidden while fullscreen */}
+      {!isFullscreen && (
+        <div className="flex flex-wrap items-center gap-3">
+
+          {/* Color swatches */}
+          <div className="flex items-center gap-1.5">
+            {(Object.entries(CLOCK_COLORS) as [ClockColorKey, typeof CLOCK_COLORS[ClockColorKey]][]).map(([k, v]) => (
+              <button
+                key={k}
+                onClick={() => setColorKey(k)}
+                title={v.name}
+                className="w-5 h-5 rounded-full transition-all"
+                style={{
+                  background: v.hex,
+                  boxShadow: colorKey === k
+                    ? `0 0 0 2px var(--bg), 0 0 0 3.5px ${v.hex}`
+                    : "none",
+                  transform: colorKey === k ? "scale(1.15)" : "scale(1)",
+                }}
+              />
+            ))}
+          </div>
+
+          {/* Seconds toggle */}
+          <button onClick={() => setShowSec((s) => !s)}
+            className="rounded-lg px-2.5 py-1 text-xs transition"
+            style={tabSty(showSec)}>
+            Secondes
+          </button>
+
+          {/* City / location */}
+          {editingCity ? (
+            <input
+              autoFocus
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              onBlur={() => setEditingCity(false)}
+              onKeyDown={(e) => e.key === "Enter" && setEditingCity(false)}
+              placeholder="Ville ou lieu…"
+              className="rounded-lg px-2.5 py-1 text-xs focus:outline-none"
+              style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.04)", color: "var(--text)", width: 130 }}
+            />
+          ) : (
+            <button onClick={() => setEditingCity(true)}
+              className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs transition hover:opacity-80"
+              style={{ border: "1px solid var(--stroke)", color: city ? "var(--text)" : "var(--muted)" }}>
+              <MapPin size={11} />
+              {city || "Ajouter un lieu…"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Clock display */}
+      <div
+        ref={clockRef}
+        className="relative rounded-2xl flex flex-col items-center justify-center overflow-hidden select-none"
+        style={{
+          minHeight: isFullscreen ? "100dvh" : 200,
+          background: isFullscreen
+            ? `radial-gradient(ellipse at 50% 40%, ${c.glow.replace(".55", ".18")} 0%, #050510 65%)`
+            : `radial-gradient(ellipse at 50% 40%, ${c.glow.replace(".55", ".12")} 0%, rgba(5,5,16,.95) 70%)`,
+          border: isFullscreen ? "none" : `1px solid ${c.hex}28`,
+          cursor: isFullscreen ? "none" : undefined,
+        }}
+      >
+        {/* Subtle inner glow ring */}
+        <div className="absolute inset-0 pointer-events-none rounded-2xl"
+          style={{ boxShadow: `inset 0 0 80px ${c.glow.replace(".55", ".07")}` }} />
+
+        {/* Location label */}
+        {city && (
+          <p className="tracking-[.25em] uppercase font-medium"
+            style={{
+              color: c.hex,
+              opacity: .6,
+              fontSize: isFullscreen ? "clamp(.7rem, 1.5vw, 1.2rem)" : "0.65rem",
+              marginBottom: isFullscreen ? "2vh" : "0.5rem",
+            }}>
+            <MapPin size={isFullscreen ? 14 : 10} className="inline mr-1 -mt-0.5" />
+            {city}
+          </p>
+        )}
+
+        {/* Time */}
+        <div
+          className="font-mono font-bold leading-none tabular-nums"
+          style={{
+            fontSize: isFullscreen ? "clamp(5rem, 20vw, 18rem)" : "clamp(3.2rem, 7vw, 4.8rem)",
+            color: c.hex,
+            textShadow: `0 0 30px ${c.glow}, 0 0 70px ${c.glow.replace(".55", ".3")}, 0 0 120px ${c.glow.replace(".55", ".12")}`,
+            letterSpacing: "0.04em",
+          }}
+        >
+          {timeStr}
+        </div>
+
+        {/* Date */}
+        <p
+          className="font-light tracking-widest"
+          style={{
+            color: c.hex,
+            opacity: .55,
+            fontSize: isFullscreen ? "clamp(.9rem, 2.5vw, 2rem)" : "0.75rem",
+            marginTop: isFullscreen ? "2vh" : "0.75rem",
+            letterSpacing: "0.12em",
+          }}
+        >
+          {dateStr}
+        </p>
+
+        {/* Fullscreen toggle button */}
+        <button
+          onClick={toggleFullscreen}
+          className="absolute bottom-3 right-3 rounded-lg p-2 transition hover:opacity-80"
+          style={{
+            color: c.hex,
+            border: `1px solid ${c.hex}35`,
+            background: "rgba(0,0,0,.35)",
+            opacity: isFullscreen ? 0 : 1,
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = isFullscreen ? "0" : "1")}
+        >
+          {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+        </button>
+
+        {/* Fullscreen: click anywhere to exit */}
+        {isFullscreen && (
+          <button
+            onClick={toggleFullscreen}
+            className="absolute inset-0 w-full h-full opacity-0"
+            aria-label="Quitter le plein écran"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 declare global { interface Window { PDFLib?: any; } }
 
 /* ── MAIN ───────────────────────────────────────────────── */
@@ -1294,7 +1501,7 @@ export default function Tools() {
     resize: <ResizeTool />, merge: <MergeTool />, extract: <ExtractTool />,
     convert: <ConvertTool />, password: <PasswordTool />, tva: <TVATool />,
     date: <DateTool />, units: <UnitsTool />, base64: <Base64Tool />,
-    meta: <MetaTool />, qrcode: <QRTool />,
+    meta: <MetaTool />, qrcode: <QRTool />, clock: <ClockTool />,
   };
 
   return (

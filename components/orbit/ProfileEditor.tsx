@@ -187,6 +187,13 @@ export default function ProfileEditor({ onClose }: Props) {
             </div>
             <div><label className={lbl} style={{ color: "var(--muted)" }}>Email</label>
               <input type="email" value={current.email} onChange={(e) => setF("email", e.target.value)} className={inputCls} style={inputSty} placeholder="jean@exemple.com" /></div>
+            <div>
+              <label className={lbl} style={{ color: "var(--muted)" }}>
+                Date de naissance <span style={{ opacity: .6 }}>(facultatif — pour un message personnalisé le jour J)</span>
+              </label>
+              <input type="date" value={current.birthdate ?? ""} onChange={(e) => setF("birthdate", e.target.value)}
+                className={inputCls} style={inputSty} />
+            </div>
             <div><label className={lbl} style={{ color: "var(--muted)" }}>Bio / Notes</label>
               <textarea value={current.bio} onChange={(e) => setF("bio", e.target.value)} rows={3}
                 className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none resize-none transition"
