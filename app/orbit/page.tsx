@@ -353,6 +353,7 @@ export default function OrbitPage() {
               sending={activeTab.sending}
               savedFlash={activeTab.savedFlash}
               activeName={activeTab.meta?.name ?? null}
+              envVars={activeEnv?.variables ?? []}
             />
           </div>
 
