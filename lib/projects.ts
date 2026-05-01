@@ -16,11 +16,11 @@ export const projects: Project[] = [
     type: "showcase",
   },
   {
-    title: "Nebryon Hub",
+    title: "Orbit",
     description:
-      "Un hub de projets et une boîte à outils pour tous — images, PDF, QR codes, mots de passe et bien plus. Des outils rapides, simples et 100 % locaux.",
-    href: "#",
-    tags: ["Next.js", "TypeScript", "Tailwind"],
-    type: "app",
+      "Client HTTP intégré — teste tes APIs REST directement depuis le navigateur. Collections, environnements avec variables, auth Bearer/Basic/API Key, body JSON et bien plus.",
+    href: "/orbit",
+    tags: ["Next.js", "TypeScript", "Dexie", "CodeMirror"],
+    type: "showcase",
   },
 ];
