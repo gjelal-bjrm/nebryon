@@ -264,11 +264,12 @@ function CollectionNode({
   onDelete: () => void;
   onMoveRequest: (r: SavedRequest) => void;
 }) {
-  const [open,        setOpen]        = useState(false);
-  const [editing,     setEditing]     = useState(false);
-  const [editName,    setEditName]    = useState(col.name);
-  const [creating,    setCreating]    = useState<"folder" | "request" | null>(null);
-  const [newName,     setNewName]     = useState("");
+  const [open,          setOpen]          = useState(false);
+  const [editing,       setEditing]       = useState(false);
+  const [editName,      setEditName]      = useState(col.name);
+  const [creating,      setCreating]      = useState<"folder" | "request" | null>(null);
+  const [newName,       setNewName]       = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Load all folders + requests for this collection when open
   const data = useLiveQuery(async () => {
@@ -313,15 +314,16 @@ function CollectionNode({
       {/* Header row */}
       <div
         className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 cursor-pointer group transition select-none"
-        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(108,99,255,.08)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        onMouseEnter={(e) => !confirmDelete && (e.currentTarget.style.background = "rgba(108,99,255,.08)")}
+        onMouseLeave={(e) => !confirmDelete && (e.currentTarget.style.background = "transparent")}
+        style={confirmDelete ? { background: "rgba(207,35,40,.08)" } : undefined}
       >
         <ChevronRight
           size={12} className="flex-shrink-0 transition-transform"
           style={{ transform: open ? "rotate(90deg)" : "none", color: "var(--muted)" }}
           onClick={() => setOpen((o) => !o)}
         />
-        <FolderIcon size={13} style={{ color: "var(--nebula)", flexShrink: 0 }} onClick={() => setOpen((o) => !o)} />
+        <FolderIcon size={13} style={{ color: confirmDelete ? "#CF2328" : "var(--nebula)", flexShrink: 0 }} onClick={() => setOpen((o) => !o)} />
 
         {editing ? (
           <form onSubmit={(e) => { e.preventDefault(); saveRename(); }} className="flex-1 flex gap-1">
@@ -334,24 +336,44 @@ function CollectionNode({
             <button type="submit"><Check size={11} style={{ color: "var(--nebula)" }} /></button>
             <button type="button" onClick={() => setEditing(false)}><X size={11} style={{ color: "var(--muted)" }} /></button>
           </form>
+        ) : confirmDelete ? (
+          <div className="flex-1 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+            <span className="text-[10px] flex-1 truncate" style={{ color: "#CF2328" }}>
+              Delete «{col.name}»?
+            </span>
+            <button
+              onClick={onDelete}
+              className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
+              style={{ background: "#CF2328", color: "#fff" }}
+            >
+              Yes
+            </button>
+            <button
+              onClick={() => setConfirmDelete(false)}
+              className="text-[10px] px-1.5 py-0.5 rounded"
+              style={{ border: "1px solid var(--stroke)", color: "var(--muted)" }}
+            >
+              No
+            </button>
+          </div>
         ) : (
           <span className="flex-1 text-xs truncate font-medium" style={{ color: "var(--text)" }} onClick={() => setOpen((o) => !o)}>
             {col.name}
           </span>
         )}
 
-        {!editing && (
+        {!editing && !confirmDelete && (
           <div className="opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
-            <button onClick={() => { setCreating("folder"); setOpen(true); }} title="Nouveau dossier" style={{ color: "var(--muted)" }}>
+            <button onClick={() => { setCreating("folder"); setOpen(true); }} title="New folder" style={{ color: "var(--muted)" }}>
               <FolderPlus size={11} />
             </button>
-            <button onClick={() => { setCreating("request"); setOpen(true); }} title="Nouvelle requête" style={{ color: "var(--muted)" }}>
+            <button onClick={() => { setCreating("request"); setOpen(true); }} title="New request" style={{ color: "var(--muted)" }}>
               <Plus size={11} />
             </button>
-            <button onClick={() => { setEditing(true); setEditName(col.name); }} style={{ color: "var(--muted)" }}>
+            <button onClick={() => { setEditing(true); setEditName(col.name); }} title="Rename" style={{ color: "var(--muted)" }}>
               <Edit2 size={11} />
             </button>
-            <button onClick={onDelete} style={{ color: "var(--muted)" }}>
+            <button onClick={() => setConfirmDelete(true)} title="Delete" style={{ color: "var(--muted)" }}>
               <Trash2 size={11} />
             </button>
           </div>
@@ -411,14 +433,15 @@ function FolderNode({
   onLoadRequest: (r: SavedRequest) => void;
   onMoveRequest: (r: SavedRequest) => void;
 }) {
-  const [open,     setOpen]     = useState(false);
-  const [editing,  setEditing]  = useState(false);
-  const [editName, setEditName] = useState(folder.name);
-  const [creating, setCreating] = useState<"folder" | "request" | null>(null);
-  const [newName,  setNewName]  = useState("");
+  const [open,          setOpen]          = useState(false);
+  const [editing,       setEditing]       = useState(false);
+  const [editName,      setEditName]      = useState(folder.name);
+  const [creating,      setCreating]      = useState<"folder" | "request" | null>(null);
+  const [newName,       setNewName]       = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const childFolders   = allFolders.filter((f) => f.parentFolderId === folder.id);
-  const childRequests  = allRequests.filter((r) => (r.folderId ?? null) === folder.id);
+  const childFolders  = allFolders.filter((f) => f.parentFolderId === folder.id);
+  const childRequests = allRequests.filter((r) => (r.folderId ?? null) === folder.id);
 
   const saveRename = async () => {
     const name = editName.trim();
@@ -447,23 +470,20 @@ function FolderNode({
     setNewName(""); setCreating(null);
   };
 
-  const handleDelete = async () => {
-    await deleteFolder(folder.id);
-  };
-
   return (
     <div className="mb-0.5">
       <div
         className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 cursor-pointer group transition select-none"
-        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(108,99,255,.07)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        onMouseEnter={(e) => !confirmDelete && (e.currentTarget.style.background = "rgba(108,99,255,.07)")}
+        onMouseLeave={(e) => !confirmDelete && (e.currentTarget.style.background = "transparent")}
+        style={confirmDelete ? { background: "rgba(207,35,40,.08)" } : undefined}
       >
         <ChevronRight
           size={11} className="flex-shrink-0 transition-transform"
           style={{ transform: open ? "rotate(90deg)" : "none", color: "var(--muted)" }}
           onClick={() => setOpen((o) => !o)}
         />
-        <FolderIcon size={12} style={{ color: "var(--halo)", flexShrink: 0 }} onClick={() => setOpen((o) => !o)} />
+        <FolderIcon size={12} style={{ color: confirmDelete ? "#CF2328" : "var(--halo)", flexShrink: 0 }} onClick={() => setOpen((o) => !o)} />
 
         {editing ? (
           <form onSubmit={(e) => { e.preventDefault(); saveRename(); }} className="flex-1 flex gap-1">
@@ -476,24 +496,45 @@ function FolderNode({
             <button type="submit"><Check size={11} style={{ color: "var(--nebula)" }} /></button>
             <button type="button" onClick={() => setEditing(false)}><X size={11} style={{ color: "var(--muted)" }} /></button>
           </form>
+        ) : confirmDelete ? (
+          /* ── Delete confirmation ── */
+          <div className="flex-1 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+            <span className="text-[10px] flex-1 truncate" style={{ color: "#CF2328" }}>
+              Delete «{folder.name}»?
+            </span>
+            <button
+              onClick={() => deleteFolder(folder.id)}
+              className="text-[10px] px-1.5 py-0.5 rounded font-semibold"
+              style={{ background: "#CF2328", color: "#fff" }}
+            >
+              Yes
+            </button>
+            <button
+              onClick={() => setConfirmDelete(false)}
+              className="text-[10px] px-1.5 py-0.5 rounded"
+              style={{ border: "1px solid var(--stroke)", color: "var(--muted)" }}
+            >
+              No
+            </button>
+          </div>
         ) : (
           <span className="flex-1 text-xs truncate" style={{ color: "var(--text)" }} onClick={() => setOpen((o) => !o)}>
             {folder.name}
           </span>
         )}
 
-        {!editing && (
+        {!editing && !confirmDelete && (
           <div className="opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
-            <button onClick={() => { setCreating("folder"); setOpen(true); }} title="Sous-dossier" style={{ color: "var(--muted)" }}>
+            <button onClick={() => { setCreating("folder"); setOpen(true); }} title="Sub-folder" style={{ color: "var(--muted)" }}>
               <FolderPlus size={10} />
             </button>
-            <button onClick={() => { setCreating("request"); setOpen(true); }} title="Nouvelle requête" style={{ color: "var(--muted)" }}>
+            <button onClick={() => { setCreating("request"); setOpen(true); }} title="New request" style={{ color: "var(--muted)" }}>
               <Plus size={10} />
             </button>
-            <button onClick={() => { setEditing(true); setEditName(folder.name); }} style={{ color: "var(--muted)" }}>
+            <button onClick={() => { setEditing(true); setEditName(folder.name); }} title="Rename" style={{ color: "var(--muted)" }}>
               <Edit2 size={10} />
             </button>
-            <button onClick={handleDelete} style={{ color: "var(--muted)" }}>
+            <button onClick={() => setConfirmDelete(true)} title="Delete" style={{ color: "var(--muted)" }}>
               <Trash2 size={10} />
             </button>
           </div>

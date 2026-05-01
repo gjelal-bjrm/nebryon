@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Copy, Check } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { OrbitResponse, ResTab } from "@/lib/orbit/types";
 
@@ -29,14 +30,25 @@ interface Props {
 }
 
 export default function ResponsePanel({ response, loading, error }: Props) {
-  const [tab, setTab] = useState<ResTab>("body");
+  const [tab,    setTab]    = useState<ResTab>("body");
+  const [copied, setCopied] = useState(false);
+
+  const copyBody = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* silent */ }
+  };
 
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3">
-        <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
-          style={{ borderColor: "var(--nebula)", borderTopColor: "transparent" }} />
-        <p className="text-xs" style={{ color: "var(--muted)" }}>Envoi en cours…</p>
+        <div
+          className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
+          style={{ borderColor: "var(--nebula)", borderTopColor: "transparent" }}
+        />
+        <p className="text-xs" style={{ color: "var(--muted)" }}>Sending…</p>
       </div>
     );
   }
@@ -44,8 +56,8 @@ export default function ResponsePanel({ response, loading, error }: Props) {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-2 p-6 text-center">
-        <p className="text-xs font-semibold" style={{ color: "#CF2328" }}>Erreur</p>
-        <p className="text-xs" style={{ color: "var(--muted)" }}>{error}</p>
+        <p className="text-xs font-semibold" style={{ color: "#CF2328" }}>Request failed</p>
+        <p className="text-xs font-mono" style={{ color: "var(--muted)" }}>{error}</p>
       </div>
     );
   }
@@ -53,22 +65,24 @@ export default function ResponsePanel({ response, loading, error }: Props) {
   if (!response) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-2">
-        <p className="text-sm font-medium" style={{ color: "var(--muted)" }}>Prêt à envoyer</p>
+        <p className="text-sm font-medium" style={{ color: "var(--muted)" }}>Ready to send</p>
         <p className="text-xs" style={{ color: "var(--muted)", opacity: 0.6 }}>
-          Configure ta requête et clique sur Envoyer
+          Configure your request and click Send
         </p>
       </div>
     );
   }
 
   const bodyContent = prettyBody(response.body, response.contentType);
-  const isJson = response.contentType.includes("json");
+  const isJson      = response.contentType.includes("json");
 
   return (
     <div className="flex flex-col h-full">
       {/* Status bar */}
-      <div className="flex items-center gap-4 px-3 py-2 flex-shrink-0"
-        style={{ borderBottom: "1px solid var(--stroke)" }}>
+      <div
+        className="flex items-center gap-4 px-3 py-2 flex-shrink-0"
+        style={{ borderBottom: "1px solid var(--stroke)" }}
+      >
         <span className="text-xs font-bold" style={{ color: STATUS_COLOR(response.status) }}>
           {response.status} {response.statusText}
         </span>
@@ -77,33 +91,53 @@ export default function ResponsePanel({ response, loading, error }: Props) {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-0 flex-shrink-0 px-3" style={{ borderBottom: "1px solid var(--stroke)" }}>
-        {(["body", "headers"] as const).map((t) => (
+      <div
+        className="flex items-center justify-between flex-shrink-0 px-3"
+        style={{ borderBottom: "1px solid var(--stroke)" }}
+      >
+        <div className="flex gap-0">
+          {(["body", "headers"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className="px-3 pb-2 pt-2 text-xs transition-all capitalize"
+              style={{
+                color: tab === t ? "var(--nebula)" : "var(--muted)",
+                borderBottom: tab === t ? "2px solid var(--nebula)" : "2px solid transparent",
+                marginBottom: "-1px",
+              }}
+            >
+              {t === "body" ? "Body" : "Headers"}
+              {t === "headers" && (
+                <span
+                  className="ml-1 rounded-full px-1 text-[9px]"
+                  style={{ background: "rgba(108,99,255,.2)", color: "var(--nebula)" }}
+                >
+                  {Object.keys(response.headers).length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Copy response body button */}
+        {tab === "body" && bodyContent && (
           <button
-            key={t}
-            onClick={() => setTab(t)}
-            className="px-3 pb-2 pt-2 text-xs transition-all capitalize"
-            style={{
-              color: tab === t ? "var(--nebula)" : "var(--muted)",
-              borderBottom: tab === t ? "2px solid var(--nebula)" : "2px solid transparent",
-              marginBottom: "-1px",
-            }}
+            onClick={() => copyBody(bodyContent)}
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] transition hover:opacity-80 mb-1"
+            style={{ border: "1px solid var(--stroke)", color: copied ? "var(--nebula)" : "var(--muted)" }}
+            title="Copy response body"
           >
-            {t === "body" ? "Corps" : "En-têtes"}
-            {t === "headers" && (
-              <span className="ml-1 rounded-full px-1 text-[9px]"
-                style={{ background: "rgba(108,99,255,.2)", color: "var(--nebula)" }}>
-                {Object.keys(response.headers).length}
-              </span>
-            )}
+            {copied ? <Check size={11} /> : <Copy size={11} />}
+            {copied ? "Copied!" : "Copy"}
           </button>
-        ))}
+        )}
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">
         {tab === "body" && (
-          <div className="h-full rounded-none overflow-hidden">
+          <div className="h-full overflow-hidden">
             <CodeEditor
               value={bodyContent}
               readOnly
@@ -118,8 +152,8 @@ export default function ResponsePanel({ response, loading, error }: Props) {
             <table className="w-full text-xs">
               <thead>
                 <tr style={{ color: "var(--muted)" }}>
-                  <th className="text-left pb-2 font-medium w-1/2">Clé</th>
-                  <th className="text-left pb-2 font-medium">Valeur</th>
+                  <th className="text-left pb-2 font-medium w-1/2">Key</th>
+                  <th className="text-left pb-2 font-medium">Value</th>
                 </tr>
               </thead>
               <tbody>
