@@ -13,6 +13,11 @@ class OrbitDB extends Dexie {
       requests:     "id, collectionId, name, createdAt",
       environments: "id, name, isActive",
     });
+    this.version(2).stores({
+      collections:  "id, name, createdAt",
+      requests:     "id, collectionId, name, createdAt",
+      environments: "id, name, isActive, createdAt",
+    });
   }
 }
 
