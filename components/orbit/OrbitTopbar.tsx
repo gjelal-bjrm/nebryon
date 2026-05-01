@@ -67,21 +67,36 @@ export default function OrbitTopbar({ onOpenProfile }: Props) {
         </span>
       </div>
 
-      {/* Center — nav links */}
-      <nav className="hidden sm:flex items-center gap-1">
+      {/* Center — nav links (same style as Hub Navbar) */}
+      <nav className="hidden sm:flex items-center gap-4">
         {NAV.map((item) => {
-          const isApp   = !item.href.startsWith("#");
+          const isApp     = !item.href.startsWith("#");
           const isCurrent = isApp && pathname === item.href;
+          const href      = item.href.startsWith("#") ? `/${item.href}` : item.href;
+
+          if (isApp) {
+            return (
+              <a
+                key={item.href}
+                href={href}
+                className="flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold transition"
+                style={isCurrent
+                  ? { border: "1px solid var(--nebula)", background: "rgba(108,99,255,.1)", color: "var(--halo)" }
+                  : { border: "1px solid var(--stroke)", background: "rgba(108,99,255,.06)", color: "var(--muted)" }}
+              >
+                {item.label}
+              </a>
+            );
+          }
+
           return (
             <a
               key={item.href}
-              href={item.href.startsWith("#") ? `/${item.href}` : item.href}
-              className="px-2.5 py-1 rounded-lg text-xs transition"
-              style={isCurrent
-                ? { border: "1px solid var(--nebula)", background: "rgba(108,99,255,.1)", color: "var(--halo)" }
-                : { color: "var(--muted)" }}
-              onMouseEnter={(e) => { if (!isCurrent) (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
-              onMouseLeave={(e) => { if (!isCurrent) (e.currentTarget as HTMLElement).style.color = "var(--muted)"; }}
+              href={href}
+              className="relative px-0.5 py-1 text-xs transition"
+              style={{ color: "var(--muted)" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--muted)"; }}
             >
               {item.label}
             </a>

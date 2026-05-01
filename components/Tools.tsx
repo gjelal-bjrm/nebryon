@@ -1294,7 +1294,7 @@ const CLOCK_COLORS = {
 type ClockColorKey = keyof typeof CLOCK_COLORS;
 
 function ClockTool() {
-  const [now, setNow]             = useState(new Date());
+  const [now, setNow]             = useState<Date | null>(null);
   const [showSec, setShowSec]     = useState(true);
   const [colorKey, setColorKey]   = useState<ClockColorKey>("nebula");
   const [city, setCity]           = useState("");
@@ -1303,6 +1303,7 @@ function ClockTool() {
   const clockRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    setNow(new Date());
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
@@ -1315,13 +1316,12 @@ function ClockTool() {
 
   const c = CLOCK_COLORS[colorKey];
 
-  const timeStr = now.toLocaleTimeString("fr", {
-    hour: "2-digit",
-    minute: "2-digit",
-    ...(showSec ? { second: "2-digit" } : {}),
-  });
+  const timeStr = now
+    ? now.toLocaleTimeString("fr", { hour: "2-digit", minute: "2-digit", ...(showSec ? { second: "2-digit" } : {}) })
+    : "--:--";
 
   const dateStr = (() => {
+    if (!now) return "";
     const d = now.toLocaleDateString("fr", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
     return d.charAt(0).toUpperCase() + d.slice(1);
   })();
