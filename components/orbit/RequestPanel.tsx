@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Send, Save, ChevronDown, Copy, Check, BookmarkCheck, X as XIcon } from "lucide-react";
 import dynamic from "next/dynamic";
 import KVEditor from "./KVEditor";
-import type { OrbitRequest, ReqTab, Method } from "@/lib/orbit/types";
+import type { OrbitRequest, ReqTab, Method, KVPair } from "@/lib/orbit/types";
 
 const CodeEditor = dynamic(() => import("./CodeEditor"), { ssr: false });
 
@@ -32,14 +32,73 @@ interface Props {
   savedFlash?: boolean;
   /** Name of the currently loaded saved request, null if unsaved */
   activeName?: string | null;
+  /** Variables from the currently active environment (for {{ autocomplete) */
+  envVars?: KVPair[];
 }
 
 export default function RequestPanel({
-  req, onChange, onSend, onSave, onCancel, sending, savedFlash = false, activeName = null,
+  req, onChange, onSend, onSave, onCancel, sending,
+  savedFlash = false, activeName = null, envVars = [],
 }: Props) {
-  const [tab, setTab] = useState<ReqTab>("params");
+  const [tab,        setTab]        = useState<ReqTab>("params");
   const [methodOpen, setMethodOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied,     setCopied]     = useState(false);
+
+  /* ── Env-var autocomplete ───────────────────────────────── */
+  interface Suggest { vars: KVPair[]; cursorPos: number; }
+  const [suggest,    setSuggest]    = useState<Suggest | null>(null);
+  const [suggestIdx, setSuggestIdx] = useState(0);
+  const urlInputRef = useRef<HTMLInputElement>(null);
+
+  // Reset selected index when suggestion list changes
+  useEffect(() => { setSuggestIdx(0); }, [suggest?.vars.length]);
+
+  const checkSuggestions = (val: string, pos: number) => {
+    const before  = val.slice(0, pos);
+    const match   = before.match(/\{\{([^}]*)$/);          // unclosed {{ before cursor
+    if (!match || envVars.length === 0) { setSuggest(null); return; }
+
+    const query    = match[1].toLowerCase();
+    const filtered = envVars.filter(
+      v => v.enabled && v.key && (query === "" || v.key.toLowerCase().includes(query))
+    );
+    if (filtered.length === 0) { setSuggest(null); return; }
+    setSuggest({ vars: filtered, cursorPos: pos });
+  };
+
+  const applySuggestion = (varName: string) => {
+    if (!suggest) return;
+    const before     = req.url.slice(0, suggest.cursorPos);
+    const openIdx    = before.lastIndexOf("{{");
+    const urlBefore  = req.url.slice(0, openIdx);
+    const urlAfter   = req.url.slice(suggest.cursorPos);
+    // Swallow trailing }} if already typed
+    const cleanAfter = urlAfter.startsWith("}}") ? urlAfter.slice(2) : urlAfter;
+    const newUrl     = urlBefore + `{{${varName}}}` + cleanAfter;
+    onChange({ ...req, url: newUrl });
+    setSuggest(null);
+    // Restore focus after React re-render
+    setTimeout(() => urlInputRef.current?.focus(), 0);
+  };
+
+  const handleUrlKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!suggest) {
+      if (e.key === "Enter") onSend();
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSuggestIdx(i => Math.min(i + 1, suggest.vars.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSuggestIdx(i => Math.max(i - 1, 0));
+    } else if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault();
+      applySuggestion(suggest.vars[suggestIdx]?.key ?? suggest.vars[0].key);
+    } else if (e.key === "Escape") {
+      setSuggest(null);
+    }
+  };
 
   const set = <K extends keyof OrbitRequest>(k: K, v: OrbitRequest[K]) =>
     onChange({ ...req, [k]: v });
@@ -92,15 +151,64 @@ export default function RequestPanel({
           )}
         </div>
 
-        {/* URL input */}
-        <input
-          value={req.url}
-          onChange={(e) => set("url", e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && onSend()}
-          placeholder="https://api.example.com/endpoint"
-          className="flex-1 rounded-lg px-3 h-9 text-sm focus:outline-none transition"
-          style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.03)", color: "var(--text)" }}
-        />
+        {/* URL input + env-var autocomplete */}
+        <div className="flex-1 relative">
+          <input
+            ref={urlInputRef}
+            value={req.url}
+            onChange={(e) => {
+              set("url", e.target.value);
+              checkSuggestions(e.target.value, e.target.selectionStart ?? e.target.value.length);
+            }}
+            onKeyDown={handleUrlKeyDown}
+            onBlur={() => setTimeout(() => setSuggest(null), 120)}
+            placeholder="https://api.example.com/endpoint"
+            className="w-full rounded-lg px-3 h-9 text-sm focus:outline-none transition"
+            style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.03)", color: "var(--text)" }}
+          />
+
+          {/* Autocomplete dropdown */}
+          {suggest && suggest.vars.length > 0 && (
+            <div
+              className="absolute left-0 right-0 z-50 rounded-xl overflow-hidden shadow-2xl"
+              style={{
+                top: "calc(100% + 5px)",
+                border: "1px solid var(--stroke)",
+                background: "var(--nav-bg)",
+                maxHeight: "200px",
+                overflowY: "auto",
+              }}
+            >
+              {suggest.vars.map((v, i) => (
+                <button
+                  key={v.key}
+                  onMouseDown={(e) => { e.preventDefault(); applySuggestion(v.key); }}
+                  className="flex items-center w-full gap-2 px-3 py-2 text-xs transition-colors"
+                  style={{
+                    background:  i === suggestIdx ? "rgba(108,99,255,.13)" : "transparent",
+                    borderLeft:  `2px solid ${i === suggestIdx ? "var(--nebula)" : "transparent"}`,
+                    color: "var(--text)",
+                  }}
+                >
+                  {/* {{ varName }} */}
+                  <span style={{ color: "var(--nebula)", fontFamily: "monospace", opacity: 0.7, fontSize: "11px" }}>{"{{"}  </span>
+                  <span className="font-semibold">{v.key}</span>
+                  <span style={{ color: "var(--nebula)", fontFamily: "monospace", opacity: 0.7, fontSize: "11px" }}>{"}}"}</span>
+                  {/* Current value preview */}
+                  {v.value && (
+                    <span
+                      className="ml-auto truncate"
+                      style={{ color: "var(--muted)", maxWidth: "140px", fontSize: "11px" }}
+                      title={v.value}
+                    >
+                      = {v.value}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Save */}
         <button
