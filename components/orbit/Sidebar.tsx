@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback, useLayoutEffect } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
   Plus, Folder as FolderIcon, FileText, ChevronRight,
@@ -9,6 +9,44 @@ import {
 import { db, deleteFolder } from "@/lib/orbit/db";
 import { parsePostmanCollection } from "@/lib/orbit/postman";
 import type { SavedRequest, Folder, Environment, Collection } from "@/lib/orbit/types";
+
+/* ── Sidebar open-state persistence ────────────────────────
+   Stores a JSON array of IDs (collection + folder) that are
+   currently expanded. Shared by all nodes via localStorage.
+─────────────────────────────────────────────────────────── */
+const LS_OPEN = "orbit-sidebar-open-v1";
+
+function useNodeOpen(id: string): [boolean, (val?: boolean) => void] {
+  const [open, setOpen] = useState(false);
+
+  // Restore before first paint (no SSR flash — Sidebar is client-only)
+  useLayoutEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_OPEN);
+      if (raw && (JSON.parse(raw) as string[]).includes(id)) setOpen(true);
+    } catch { /* corrupt data */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const toggle = useCallback((val?: boolean) => {
+    setOpen(prev => {
+      const next = val !== undefined ? val : !prev;
+      try {
+        const raw  = localStorage.getItem(LS_OPEN);
+        const set: string[] = raw ? JSON.parse(raw) : [];
+        const has  = set.includes(id);
+        if (next  && !has) set.push(id);
+        if (!next &&  has) set.splice(set.indexOf(id), 1);
+        localStorage.setItem(LS_OPEN, JSON.stringify(set));
+      } catch { /* private mode / full */ }
+      return next;
+    });
+  }, [id]);
+
+  return [open, toggle];
+}
+
+/* ─────────────────────────────────────────────────────────── */
 
 interface Props {
   onLoadRequest: (req: SavedRequest) => void;
@@ -264,7 +302,7 @@ function CollectionNode({
   onDelete: () => void;
   onMoveRequest: (r: SavedRequest) => void;
 }) {
-  const [open,          setOpen]          = useState(false);
+  const [open, toggleOpen] = useNodeOpen(col.id);
   const [editing,       setEditing]       = useState(false);
   const [editName,      setEditName]      = useState(col.name);
   const [creating,      setCreating]      = useState<"folder" | "request" | null>(null);
@@ -321,9 +359,9 @@ function CollectionNode({
         <ChevronRight
           size={12} className="flex-shrink-0 transition-transform"
           style={{ transform: open ? "rotate(90deg)" : "none", color: "var(--muted)" }}
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => toggleOpen()}
         />
-        <FolderIcon size={13} style={{ color: confirmDelete ? "#CF2328" : "var(--nebula)", flexShrink: 0 }} onClick={() => setOpen((o) => !o)} />
+        <FolderIcon size={13} style={{ color: confirmDelete ? "#CF2328" : "var(--nebula)", flexShrink: 0 }} onClick={() => toggleOpen()} />
 
         {editing ? (
           <form onSubmit={(e) => { e.preventDefault(); saveRename(); }} className="flex-1 flex gap-1">
@@ -357,17 +395,17 @@ function CollectionNode({
             </button>
           </div>
         ) : (
-          <span className="flex-1 text-xs truncate font-medium" style={{ color: "var(--text)" }} onClick={() => setOpen((o) => !o)}>
+          <span className="flex-1 text-xs truncate font-medium" style={{ color: "var(--text)" }} onClick={() => toggleOpen()}>
             {col.name}
           </span>
         )}
 
         {!editing && !confirmDelete && (
           <div className="opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
-            <button onClick={() => { setCreating("folder"); setOpen(true); }} title="New folder" style={{ color: "var(--muted)" }}>
+            <button onClick={() => { setCreating("folder"); toggleOpen(true); }} title="New folder" style={{ color: "var(--muted)" }}>
               <FolderPlus size={11} />
             </button>
-            <button onClick={() => { setCreating("request"); setOpen(true); }} title="New request" style={{ color: "var(--muted)" }}>
+            <button onClick={() => { setCreating("request"); toggleOpen(true); }} title="New request" style={{ color: "var(--muted)" }}>
               <Plus size={11} />
             </button>
             <button onClick={() => { setEditing(true); setEditName(col.name); }} title="Rename" style={{ color: "var(--muted)" }}>
@@ -433,7 +471,7 @@ function FolderNode({
   onLoadRequest: (r: SavedRequest) => void;
   onMoveRequest: (r: SavedRequest) => void;
 }) {
-  const [open,          setOpen]          = useState(false);
+  const [open, toggleOpen] = useNodeOpen(folder.id);
   const [editing,       setEditing]       = useState(false);
   const [editName,      setEditName]      = useState(folder.name);
   const [creating,      setCreating]      = useState<"folder" | "request" | null>(null);
@@ -481,9 +519,9 @@ function FolderNode({
         <ChevronRight
           size={11} className="flex-shrink-0 transition-transform"
           style={{ transform: open ? "rotate(90deg)" : "none", color: "var(--muted)" }}
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => toggleOpen()}
         />
-        <FolderIcon size={12} style={{ color: confirmDelete ? "#CF2328" : "var(--halo)", flexShrink: 0 }} onClick={() => setOpen((o) => !o)} />
+        <FolderIcon size={12} style={{ color: confirmDelete ? "#CF2328" : "var(--halo)", flexShrink: 0 }} onClick={() => toggleOpen()} />
 
         {editing ? (
           <form onSubmit={(e) => { e.preventDefault(); saveRename(); }} className="flex-1 flex gap-1">
@@ -518,17 +556,17 @@ function FolderNode({
             </button>
           </div>
         ) : (
-          <span className="flex-1 text-xs truncate" style={{ color: "var(--text)" }} onClick={() => setOpen((o) => !o)}>
+          <span className="flex-1 text-xs truncate" style={{ color: "var(--text)" }} onClick={() => toggleOpen()}>
             {folder.name}
           </span>
         )}
 
         {!editing && !confirmDelete && (
           <div className="opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
-            <button onClick={() => { setCreating("folder"); setOpen(true); }} title="Sub-folder" style={{ color: "var(--muted)" }}>
+            <button onClick={() => { setCreating("folder"); toggleOpen(true); }} title="Sub-folder" style={{ color: "var(--muted)" }}>
               <FolderPlus size={10} />
             </button>
-            <button onClick={() => { setCreating("request"); setOpen(true); }} title="New request" style={{ color: "var(--muted)" }}>
+            <button onClick={() => { setCreating("request"); toggleOpen(true); }} title="New request" style={{ color: "var(--muted)" }}>
               <Plus size={10} />
             </button>
             <button onClick={() => { setEditing(true); setEditName(folder.name); }} title="Rename" style={{ color: "var(--muted)" }}>
