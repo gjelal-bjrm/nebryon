@@ -278,17 +278,17 @@ export default function DiffBuilder({ onClose }: { onClose: () => void }) {
   const pill = (on?: boolean): React.CSSProperties => ({
     display:"inline-flex", alignItems:"center", gap:5, cursor:"pointer",
     padding:"3px 10px", borderRadius:6, fontSize:12, fontWeight:500,
-    border:`1px solid ${on ? "rgba(139,92,246,.60)" : DIV}`,
-    background: on ? "rgba(139,92,246,.16)" : "var(--card)",
-    color: on ? "#c4b5fd" : "var(--muted)",
+    border:`1px solid ${on ? "rgba(139,92,246,.65)" : DIV}`,
+    background: on ? "rgba(139,92,246,.16)" : "var(--bg)",
+    color: on ? "var(--halo)" : "var(--text)",
     userSelect:"none" as const, transition:"all .12s",
   });
   const icon28: React.CSSProperties = {
     display:"inline-flex",alignItems:"center",justifyContent:"center",
     width:28, height:28, borderRadius:6, cursor:"pointer",
     border:`1px solid ${DIV}`,
-    background:"var(--card)",
-    color:"var(--muted)",
+    background:"var(--bg)",
+    color:"var(--text)",
   };
 
   /* ════════════════════════════════════════════════════════ */
@@ -476,8 +476,9 @@ function DiffView({ rows, wrap, wordLevel, scrollRef,
           const lNC  = NUM_COL[row.lKind];
           const rNC  = row.rKind==="mod" ? NUM_COL_MOD_R : NUM_COL[row.rKind];
 
-          // Stripe pattern for blank cells
-          const stripe = "repeating-linear-gradient(135deg,rgba(255,255,255,.03) 0,rgba(255,255,255,.03) 1px,transparent 1px,transparent 9px)";
+          // Stripe pattern for blank cells — combined into a single `background` value
+          // to avoid mixing `background` shorthand with `backgroundImage` longhand (React warning)
+          const stripe = "repeating-linear-gradient(135deg,rgba(128,128,128,.05) 0,rgba(128,128,128,.05) 1px,transparent 1px,transparent 9px)";
 
           // Chunk boundary — add a slightly visible separator
           const isChunkStart = row.chunk >= 0 && (i===0 || rows[i-1].chunk !== row.chunk);
@@ -507,9 +508,7 @@ function DiffView({ rows, wrap, wordLevel, scrollRef,
               <div style={{
                 flex:1, minWidth:0,
                 padding:"0 10px",
-                background: row.lKind==="blank"
-                  ? undefined : lBg,
-                backgroundImage: row.lKind==="blank" ? stripe : undefined,
+                background: row.lKind==="blank" ? stripe : lBg,
                 fontFamily: monoFont, fontSize:12,
                 lineHeight: `${RH}px`,
                 color: row.lKind==="blank" ? "transparent"
@@ -579,9 +578,7 @@ function DiffView({ rows, wrap, wordLevel, scrollRef,
               <div style={{
                 flex:1, minWidth:0,
                 padding:"0 10px",
-                background: row.rKind==="blank"
-                  ? undefined : rBg,
-                backgroundImage: row.rKind==="blank" ? stripe : undefined,
+                background: row.rKind==="blank" ? stripe : rBg,
                 fontFamily: monoFont, fontSize:12,
                 lineHeight: `${RH}px`,
                 color: row.rKind==="blank" ? "transparent"
@@ -663,8 +660,8 @@ function NumberedPane({ label, value, onChange, onLoad, onCopy, copied, onClear 
     display:"inline-flex",alignItems:"center",justifyContent:"center",
     width:24, height:24, borderRadius:5, cursor:"pointer",
     border:`1px solid ${DIV}`,
-    background:"var(--card)",
-    color:"var(--muted)",
+    background:"var(--bg)",
+    color:"var(--text)",
   };
 
   return (
@@ -759,8 +756,8 @@ function PanelBtns({ onLoad, onEdit, onCopy, copied, onClear, hasContent }: {
     display:"inline-flex",alignItems:"center",justifyContent:"center",
     width:20, height:20, borderRadius:4, cursor:"pointer",
     border:`1px solid ${DIV}`,
-    background:"var(--card)",
-    color:"var(--muted)",
+    background:"var(--bg)",
+    color:"var(--text)",
   };
   return (
     <div style={{ display:"flex", gap:3 }}>
