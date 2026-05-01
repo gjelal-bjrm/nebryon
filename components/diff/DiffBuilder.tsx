@@ -476,9 +476,8 @@ function DiffView({ rows, wrap, wordLevel, scrollRef,
           const lNC  = NUM_COL[row.lKind];
           const rNC  = row.rKind==="mod" ? NUM_COL_MOD_R : NUM_COL[row.rKind];
 
-          // Stripe pattern for blank cells — combined into a single `background` value
-          // to avoid mixing `background` shorthand with `backgroundImage` longhand (React warning)
-          const stripe = "repeating-linear-gradient(135deg,rgba(128,128,128,.05) 0,rgba(128,128,128,.05) 1px,transparent 1px,transparent 9px)";
+          // Blank-cell stripe — only used for backgroundImage longhand (never in `background` shorthand)
+          const STRIPE = "repeating-linear-gradient(135deg,rgba(128,128,128,.06) 0,rgba(128,128,128,.06) 1px,transparent 1px,transparent 9px)";
 
           // Chunk boundary — add a slightly visible separator
           const isChunkStart = row.chunk >= 0 && (i===0 || rows[i-1].chunk !== row.chunk);
@@ -508,7 +507,8 @@ function DiffView({ rows, wrap, wordLevel, scrollRef,
               <div style={{
                 flex:1, minWidth:0,
                 padding:"0 10px",
-                background: row.lKind==="blank" ? stripe : lBg,
+                backgroundColor: row.lKind==="blank" ? "transparent" : lBg,
+                backgroundImage: row.lKind==="blank" ? STRIPE : "none",
                 fontFamily: monoFont, fontSize:12,
                 lineHeight: `${RH}px`,
                 color: row.lKind==="blank" ? "transparent"
@@ -578,7 +578,8 @@ function DiffView({ rows, wrap, wordLevel, scrollRef,
               <div style={{
                 flex:1, minWidth:0,
                 padding:"0 10px",
-                background: row.rKind==="blank" ? stripe : rBg,
+                backgroundColor: row.rKind==="blank" ? "transparent" : rBg,
+                backgroundImage: row.rKind==="blank" ? STRIPE : "none",
                 fontFamily: monoFont, fontSize:12,
                 lineHeight: `${RH}px`,
                 color: row.rKind==="blank" ? "transparent"
