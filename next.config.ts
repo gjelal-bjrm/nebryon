@@ -1,15 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  webpack: (config) => {
-    // Prevent webpack from trying to bundle the native canvas module
-    // required by @react-pdf/renderer on the server side
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      canvas: false,
-    };
-    return config;
-  },
+  // Empty turbopack config — satisfies Next.js 16 Turbopack requirement.
+  // @react-pdf/renderer is loaded client-side only (dynamic ssr:false),
+  // so no canvas alias is needed.
+  turbopack: {},
 };
 
 export default nextConfig;
