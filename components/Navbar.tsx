@@ -9,6 +9,7 @@ type NavItem = { label: string; href: string };
 const NAV: NavItem[] = [
   { label: "Outils",  href: "#tools" },
   { label: "Projets", href: "#projects" },
+  { label: "Orbit",   href: "/orbit" },
   //{ label: "Contact", href: "#contact" },
 ];
 
@@ -79,7 +80,21 @@ export default function Navbar() {
   }, [open]);
 
   const NavLink = ({ item }: { item: NavItem }) => {
-    const isActive = active === item.href;
+    const isApp = !item.href.startsWith("#");
+    const isActive = !isApp && active === item.href;
+
+    if (isApp) {
+      return (
+        <a
+          href={item.href}
+          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold transition"
+          style={{ border: "1px solid var(--nebula)", background: "rgba(108,99,255,.1)", color: "var(--halo)" }}
+        >
+          {item.label}
+        </a>
+      );
+    }
+
     return (
       <a
         href={item.href}
