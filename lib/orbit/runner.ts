@@ -13,7 +13,8 @@ const isElectronCtx = () =>
 
 export async function runRequest(
   req: OrbitRequest,
-  env: Environment | null
+  env: Environment | null,
+  signal?: AbortSignal,
 ): Promise<OrbitResponse> {
   const vars = env?.variables ?? [];
 
@@ -76,6 +77,7 @@ export async function runRequest(
       method: req.method,
       headers,
       body: isNoBody ? undefined : body,
+      signal,
     });
     const time = Math.round(performance.now() - start);
     const resBodyRaw = await res.text();
@@ -105,6 +107,7 @@ export async function runRequest(
       headers,
       body: isNoBody ? undefined : body,
     }),
+    signal,
   });
   const clientTime = Math.round(performance.now() - start);
 
