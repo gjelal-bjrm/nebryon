@@ -13,6 +13,14 @@ function dateRange(start: string, end: string, current: boolean) {
   return `${start} – ${current ? "Présent" : end || ""}`;
 }
 
+/** Format ISO date (YYYY-MM-DD from <input type="date">) to DD/MM/YYYY */
+function formatBirthdate(raw: string): string {
+  if (!raw) return "";
+  const [y, m, d] = raw.split("-");
+  if (!y || !m || !d) return raw;
+  return `${d}/${m}/${y}`;
+}
+
 function bullets(description: string): string[] {
   return description.split("\n").map((l) => l.trim()).filter(Boolean);
 }
@@ -90,6 +98,7 @@ function ClassiqueDoc({ data }: { data: CVData }) {
     data.personal.email && { label: "Email", value: data.personal.email },
     data.personal.phone && { label: "Téléphone", value: data.personal.phone },
     data.personal.address && { label: "Adresse", value: data.personal.address },
+    data.personal.birthdate && { label: "Naissance", value: formatBirthdate(data.personal.birthdate) },
     data.personal.linkedin && { label: "LinkedIn", value: data.personal.linkedin },
     data.personal.github && { label: "GitHub", value: data.personal.github },
     data.personal.website && { label: "Site web", value: data.personal.website },
@@ -285,8 +294,9 @@ function ModerneDoc({ data }: { data: CVData }) {
 
   const contactParts = [
     data.personal.email, data.personal.phone, data.personal.address,
+    data.personal.birthdate ? formatBirthdate(data.personal.birthdate) : null,
     data.personal.linkedin, data.personal.github, data.personal.website,
-  ].filter(Boolean);
+  ].filter(Boolean) as string[];
 
   const skillsByCategory = data.skills.reduce<Record<string, typeof data.skills>>((acc, s) => {
     const cat = s.category || "Compétences";
@@ -454,8 +464,9 @@ function MinimalisteDoc({ data }: { data: CVData }) {
 
   const contactParts = [
     data.personal.email, data.personal.phone, data.personal.address,
+    data.personal.birthdate ? formatBirthdate(data.personal.birthdate) : null,
     data.personal.linkedin, data.personal.github, data.personal.website,
-  ].filter(Boolean);
+  ].filter(Boolean) as string[];
 
   return (
     <Document>
@@ -588,9 +599,10 @@ function ATSDoc({ data }: { data: CVData }) {
 
   const contactParts = [
     data.personal.email, data.personal.phone,
+    data.personal.birthdate ? formatBirthdate(data.personal.birthdate) : null,
     data.personal.linkedin, data.personal.github, data.personal.website,
     data.personal.address,
-  ].filter(Boolean);
+  ].filter(Boolean) as string[];
 
   return (
     <Document>

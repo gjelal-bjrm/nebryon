@@ -379,6 +379,14 @@ export default function CVBuilder({ onClose }: Props) {
             <Input label="Téléphone" value={data.personal.phone} onChange={(v) => updPersonal("phone", v)} placeholder="+41 79 000 00 00" />
           </div>
           <Input label="Adresse" value={data.personal.address} onChange={(v) => updPersonal("address", v)} placeholder="Genève, Suisse" />
+          <div>
+            <Label>Date de naissance <span style={{ color: "var(--muted)", fontWeight: 400 }}>(optionnel)</span></Label>
+            <input type="date" value={data.personal.birthdate} onChange={(e) => updPersonal("birthdate", e.target.value)}
+              className={inputCls} style={{ ...inputSty, colorScheme: "dark" }} />
+            <p className="text-[10px] mt-1.5" style={{ color: "var(--muted)" }}>
+              Non recommandé en Suisse/UE — peut exposer à de la discrimination. N'apparaît dans le CV que si ce champ est rempli.
+            </p>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <Input label="LinkedIn" value={data.personal.linkedin} onChange={(v) => updPersonal("linkedin", v)} placeholder="linkedin.com/in/sophie" />
             <Input label="GitHub" value={data.personal.github} onChange={(v) => updPersonal("github", v)} placeholder="github.com/sophie" />

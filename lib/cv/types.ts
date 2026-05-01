@@ -33,6 +33,7 @@ export interface CVPersonal {
   website: string;
   summary: string;
   photo: string;           // base64 data URL or ""
+  birthdate: string;       // DD/MM/YYYY or "" — optional, omitted if empty
 }
 
 export interface CVExperience {
@@ -97,7 +98,7 @@ export function defaultCVData(): CVData {
     personal: {
       firstName: "", lastName: "", jobTitle: "", email: "",
       phone: "", address: "", linkedin: "", github: "", website: "",
-      summary: "", photo: "",
+      summary: "", photo: "", birthdate: "",
     },
     experiences: [],
     education: [],
