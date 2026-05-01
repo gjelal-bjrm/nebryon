@@ -67,8 +67,10 @@ export default function OrbitTopbar({ onOpenProfile }: Props) {
         </span>
       </div>
 
-      {/* Center — nav links (same style as Hub Navbar) */}
-      <nav className="hidden sm:flex items-center gap-4">
+      {/* Right — nav links + greeting + theme + profile (mirrors Hub Navbar layout) */}
+      <div className="hidden sm:flex items-center gap-4">
+
+        {/* Nav links */}
         {NAV.map((item) => {
           const isApp     = !item.href.startsWith("#");
           const isCurrent = isApp && pathname === item.href;
@@ -102,10 +104,7 @@ export default function OrbitTopbar({ onOpenProfile }: Props) {
             </a>
           );
         })}
-      </nav>
 
-      {/* Right — greeting + theme + profile */}
-      <div className="flex items-center gap-2.5">
         <GreetingClock compact />
         <button
           onClick={toggleTheme}
