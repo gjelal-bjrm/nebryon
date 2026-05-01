@@ -191,16 +191,32 @@ export default function HeroDemos() {
   const reduce = useReducedMotion();
 
   return (
-    <motion.div
-      className="flex gap-3 overflow-x-auto pb-1 -mx-2 px-2 sm:overflow-visible sm:mx-0 sm:px-0 mb-10"
-      initial={reduce ? undefined : { opacity: 0, y: 12 }}
-      animate={reduce ? undefined : { opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, delay: 0.15 }}
-      style={{ scrollbarWidth: "none" }}
-    >
-      <PasswordDemo />
-      <QRDemo />
-      <MergeDemo />
-    </motion.div>
+    <div className="mb-10">
+      <motion.div
+        className="flex gap-3 overflow-x-auto pb-1 -mx-2 px-2 sm:overflow-visible sm:mx-0 sm:px-0"
+        initial={reduce ? undefined : { opacity: 0, y: 12 }}
+        animate={reduce ? undefined : { opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.15 }}
+        style={{ scrollbarWidth: "none" }}
+      >
+        <PasswordDemo />
+        <QRDemo />
+        <MergeDemo />
+      </motion.div>
+
+      <motion.p
+        className="mt-4 text-sm"
+        initial={reduce ? undefined : { opacity: 0 }}
+        animate={reduce ? undefined : { opacity: 1 }}
+        transition={{ duration: 0.6, delay: 0.5 }}
+        style={{ color: "var(--muted)" }}
+      >
+        Et bien plus encore —{" "}
+        <a href="#tools" className="transition hover:opacity-80"
+          style={{ color: "var(--nebula)", textDecoration: "underline", textUnderlineOffset: "3px" }}>
+          explorer tous les outils
+        </a>
+      </motion.p>
+    </div>
   );
 }
