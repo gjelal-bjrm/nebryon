@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { BlobProvider, PDFDownloadLink } from "@react-pdf/renderer";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/orbit/db";
 import {
-  X, Download, ChevronDown, Plus, Trash2, Eye, Camera, User, AlertCircle, ArrowLeft,
+  X, Download, ChevronDown, Plus, Trash2, Eye, RefreshCw, Camera, User, AlertCircle, ArrowLeft,
 } from "lucide-react";
 import CVDocument from "./CVDocument";
 import {
@@ -135,19 +136,19 @@ function PhotoUploader({ value, onChange, disabled }: {
   return (
     <div className="flex items-center gap-3">
       {value ? (
-        <img src={value} alt="photo" className="w-14 h-14 rounded-full object-cover flex-shrink-0"
+        <img src={value} alt="photo" className="w-12 h-12 rounded-full object-cover flex-shrink-0"
           style={{ border: "1.5px solid var(--stroke)" }} />
       ) : (
-        <div className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0"
+        <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
           style={{ border: "1.5px solid var(--stroke)", background: "rgba(108,99,255,.08)" }}>
-          <User size={20} style={{ color: "var(--muted)" }} />
+          <User size={18} style={{ color: "var(--muted)" }} />
         </div>
       )}
       <div className="flex flex-col gap-1.5">
         <button onClick={() => fileRef.current?.click()}
           className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition hover:opacity-85"
           style={{ border: "1px solid var(--stroke)", color: "var(--muted)" }}>
-          <Camera size={12} /> {value ? "Changer la photo" : "Ajouter une photo"}
+          <Camera size={12} /> {value ? "Changer" : "Ajouter une photo"}
         </button>
         {value && (
           <button onClick={() => onChange("")}
@@ -211,19 +212,46 @@ const TABS = [
 
 type TabId = typeof TABS[number]["id"];
 
-/* ─── PDF Preview popup ────────────────────────────────────── */
+/* ─── Live preview pane (side panel) ─────────────────────── */
+function PreviewPane({ data, triggerKey }: { data: CVData; triggerKey: number }) {
+  return (
+    <BlobProvider document={<CVDocument data={data} />} key={triggerKey}>
+      {({ url, loading, error }) => {
+        if (loading) return (
+          <div className="flex flex-col items-center justify-center h-full gap-3">
+            <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
+              style={{ borderColor: "var(--nebula)", borderTopColor: "transparent" }} />
+            <p className="text-xs" style={{ color: "var(--muted)" }}>Génération du PDF…</p>
+          </div>
+        );
+        if (error) return (
+          <div className="flex flex-col items-center justify-center h-full gap-2 p-6 text-center">
+            <AlertCircle size={20} style={{ color: "#CF2328" }} />
+            <p className="text-xs font-semibold" style={{ color: "#CF2328" }}>Erreur de rendu</p>
+            <p className="text-[10px] font-mono" style={{ color: "var(--muted)" }}>{error.message}</p>
+          </div>
+        );
+        return (
+          <iframe src={url ?? ""} className="w-full h-full"
+            style={{ border: "none", background: "#fff" }} title="Aperçu CV" />
+        );
+      }}
+    </BlobProvider>
+  );
+}
+
+/* ─── Full-screen preview popup ──────────────────────────── */
 function PreviewPopup({ data, onClose, fileName }: {
   data: CVData; onClose: () => void; fileName: string;
 }) {
-  // Close on Escape key
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
   }, [onClose]);
 
-  return (
-    <div className="fixed inset-0 z-[60] flex flex-col" style={{ background: "var(--bg)" }}>
+  return createPortal(
+    <div className="fixed inset-0 flex flex-col" style={{ zIndex: 70, background: "var(--bg)" }}>
       {/* Header */}
       <div className="flex items-center justify-between px-5 h-12 flex-shrink-0"
         style={{ borderBottom: "1px solid var(--stroke)", background: "var(--nav-bg)" }}>
@@ -232,20 +260,19 @@ function PreviewPopup({ data, onClose, fileName }: {
           style={{ border: "1px solid var(--stroke)", color: "var(--muted)" }}>
           <ArrowLeft size={13} /> Retour au formulaire
         </button>
-        <span className="text-xs font-semibold" style={{ color: "var(--muted)" }}>Aperçu CV</span>
+        <span className="text-xs font-semibold" style={{ color: "var(--muted)" }}>Aperçu — Esc pour fermer</span>
         <PDFDownloadLink document={<CVDocument data={data} />} fileName={fileName}>
           {({ loading }) => (
             <button
               className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-85"
               style={{ background: "linear-gradient(135deg, var(--nebula), var(--indigo))", border: "1px solid rgba(108,99,255,.3)" }}>
-              <Download size={12} />
-              {loading ? "Génération…" : "Télécharger PDF"}
+              <Download size={12} /> {loading ? "Génération…" : "Télécharger PDF"}
             </button>
           )}
         </PDFDownloadLink>
       </div>
 
-      {/* PDF iframe — full height */}
+      {/* Full PDF */}
       <div className="flex-1 overflow-hidden">
         <BlobProvider document={<CVDocument data={data} />}>
           {({ url, loading, error }) => {
@@ -263,18 +290,13 @@ function PreviewPopup({ data, onClose, fileName }: {
                 <p className="text-[10px] font-mono" style={{ color: "var(--muted)" }}>{error.message}</p>
               </div>
             );
-            return (
-              <iframe
-                src={url ?? ""}
-                className="w-full h-full"
-                style={{ border: "none", background: "#fff" }}
-                title="Aperçu CV"
-              />
-            );
+            return <iframe src={url ?? ""} className="w-full h-full"
+              style={{ border: "none", background: "#fff" }} title="Aperçu CV plein écran" />;
           }}
         </BlobProvider>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -287,9 +309,14 @@ interface Props {
 }
 
 export default function CVBuilder({ onClose }: Props) {
-  const [data, setData]           = useState<CVData>(loadCV);
-  const [tab,  setTab]            = useState<TabId>("personal");
+  const [data, setData]               = useState<CVData>(loadCV);
+  const [tab,  setTab]                = useState<TabId>("personal");
+  const [previewKey, setPreviewKey]   = useState(0);
   const [showPreview, setShowPreview] = useState(false);
+  const [mounted, setMounted]         = useState(false);
+
+  // Mount guard for createPortal
+  useEffect(() => { setMounted(true); }, []);
 
   // Pre-fill from Dexie profile on first mount
   const profile = useLiveQuery(() => db.profile.get("singleton"), []);
@@ -329,10 +356,9 @@ export default function CVBuilder({ onClose }: Props) {
   /* ── Tab content ── */
   function renderTab() {
     switch (tab) {
-      /* ── Présentation ── */
       case "personal": return (
-        <div className="space-y-5 max-w-2xl">
-          <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
             <Input label="Prénom" value={data.personal.firstName} onChange={(v) => updPersonal("firstName", v)} placeholder="Sophie" />
             <Input label="Nom" value={data.personal.lastName} onChange={(v) => updPersonal("lastName", v)} placeholder="Dubois" />
           </div>
@@ -340,69 +366,50 @@ export default function CVBuilder({ onClose }: Props) {
 
           <div>
             <Label>Photo de profil</Label>
-            <PhotoUploader
-              value={data.personal.photo}
-              onChange={(v) => updPersonal("photo", v)}
-              disabled={!data.design.showPhoto}
-            />
+            <PhotoUploader value={data.personal.photo} onChange={(v) => updPersonal("photo", v)} disabled={!data.design.showPhoto} />
             {!data.design.showPhoto && (
-              <p className="text-[10px] mt-2" style={{ color: "var(--muted)" }}>
+              <p className="text-[10px] mt-1.5" style={{ color: "var(--muted)" }}>
                 Active l'option photo dans l'onglet <strong style={{ color: "var(--text)" }}>Design</strong> pour en ajouter une.
               </p>
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <Input label="Email" value={data.personal.email} onChange={(v) => updPersonal("email", v)} placeholder="sophie@exemple.ch" type="email" />
             <Input label="Téléphone" value={data.personal.phone} onChange={(v) => updPersonal("phone", v)} placeholder="+41 79 000 00 00" />
           </div>
           <Input label="Adresse" value={data.personal.address} onChange={(v) => updPersonal("address", v)} placeholder="Genève, Suisse" />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <Input label="LinkedIn" value={data.personal.linkedin} onChange={(v) => updPersonal("linkedin", v)} placeholder="linkedin.com/in/sophie" />
             <Input label="GitHub" value={data.personal.github} onChange={(v) => updPersonal("github", v)} placeholder="github.com/sophie" />
           </div>
           <Input label="Site web" value={data.personal.website} onChange={(v) => updPersonal("website", v)} placeholder="sophie.dev" />
-          <Textarea label="Résumé / Accroche" value={data.personal.summary} onChange={(v) => updPersonal("summary", v)} rows={5}
-            placeholder="Développeuse Full Stack avec 5 ans d'expérience en Suisse romande, passionnée par les interfaces performantes et accessibles. Je conçois des applications web robustes avec React et Node.js." />
+          <Textarea label="Résumé / Accroche" value={data.personal.summary} onChange={(v) => updPersonal("summary", v)} rows={4}
+            placeholder="Développeuse Full Stack avec 5 ans d'expérience en Suisse romande, passionnée par les interfaces performantes et accessibles…" />
         </div>
       );
 
-      /* ── Expériences ── */
       case "experiences": return (
-        <div className="space-y-3 max-w-2xl">
+        <div className="space-y-3">
           {data.experiences.map((exp, i) => (
-            <Card key={exp.id}
-              title={exp.position || `Expérience ${i + 1}`}
-              subtitle={exp.company}
+            <Card key={exp.id} title={exp.position || `Expérience ${i + 1}`} subtitle={exp.company}
               onDelete={() => upd("experiences", data.experiences.filter((e) => e.id !== exp.id))}>
               <div className="grid grid-cols-2 gap-3">
-                <Input label="Poste" value={exp.position}
-                  onChange={(v) => upd("experiences", data.experiences.map((e) => e.id === exp.id ? { ...e, position: v } : e))}
-                  placeholder="Développeur Frontend" />
-                <Input label="Entreprise" value={exp.company}
-                  onChange={(v) => upd("experiences", data.experiences.map((e) => e.id === exp.id ? { ...e, company: v } : e))}
-                  placeholder="Acme SA" />
+                <Input label="Poste" value={exp.position} onChange={(v) => upd("experiences", data.experiences.map((e) => e.id === exp.id ? { ...e, position: v } : e))} placeholder="Développeur Frontend" />
+                <Input label="Entreprise" value={exp.company} onChange={(v) => upd("experiences", data.experiences.map((e) => e.id === exp.id ? { ...e, company: v } : e))} placeholder="Acme SA" />
               </div>
-              <Input label="Lieu" value={exp.location}
-                onChange={(v) => upd("experiences", data.experiences.map((e) => e.id === exp.id ? { ...e, location: v } : e))}
-                placeholder="Genève / Remote" />
+              <Input label="Lieu" value={exp.location} onChange={(v) => upd("experiences", data.experiences.map((e) => e.id === exp.id ? { ...e, location: v } : e))} placeholder="Genève / Remote" />
               <div className="grid grid-cols-2 gap-3">
-                <Input label="Début (MM/AAAA)" value={exp.startDate}
-                  onChange={(v) => upd("experiences", data.experiences.map((e) => e.id === exp.id ? { ...e, startDate: v } : e))}
-                  placeholder="01/2022" />
-                <Input label="Fin (MM/AAAA)" value={exp.endDate}
-                  onChange={(v) => upd("experiences", data.experiences.map((e) => e.id === exp.id ? { ...e, endDate: v } : e))}
-                  placeholder="12/2023" />
+                <Input label="Début (MM/AAAA)" value={exp.startDate} onChange={(v) => upd("experiences", data.experiences.map((e) => e.id === exp.id ? { ...e, startDate: v } : e))} placeholder="01/2022" />
+                <Input label="Fin (MM/AAAA)" value={exp.endDate} onChange={(v) => upd("experiences", data.experiences.map((e) => e.id === exp.id ? { ...e, endDate: v } : e))} placeholder="12/2023" />
               </div>
               <label className="flex items-center gap-2 text-xs cursor-pointer select-none" style={{ color: "var(--muted)" }}>
-                <input type="checkbox" checked={exp.current}
-                  onChange={(e) => upd("experiences", data.experiences.map((ex) => ex.id === exp.id ? { ...ex, current: e.target.checked } : ex))} />
+                <input type="checkbox" checked={exp.current} onChange={(e) => upd("experiences", data.experiences.map((ex) => ex.id === exp.id ? { ...ex, current: e.target.checked } : ex))} />
                 Poste actuel
               </label>
               <Textarea label="Description (une ligne = une puce)" value={exp.description}
                 onChange={(v) => upd("experiences", data.experiences.map((e) => e.id === exp.id ? { ...e, description: v } : e))}
-                rows={4}
-                placeholder={"Développement de l'interface React\nMise en place d'une CI/CD GitHub Actions\nOptimisation des performances Core Web Vitals"} />
+                rows={4} placeholder={"Développement de l'interface React\nMise en place d'une CI/CD GitHub Actions\nOptimisation des performances Core Web Vitals"} />
             </Card>
           ))}
           <AddBtn onClick={() => upd("experiences", [...data.experiences, {
@@ -411,42 +418,26 @@ export default function CVBuilder({ onClose }: Props) {
         </div>
       );
 
-      /* ── Formation ── */
       case "education": return (
-        <div className="space-y-3 max-w-2xl">
+        <div className="space-y-3">
           {data.education.map((edu, i) => (
-            <Card key={edu.id}
-              title={edu.degree || `Formation ${i + 1}`}
-              subtitle={edu.institution}
+            <Card key={edu.id} title={edu.degree || `Formation ${i + 1}`} subtitle={edu.institution}
               onDelete={() => upd("education", data.education.filter((e) => e.id !== edu.id))}>
               <div className="grid grid-cols-2 gap-3">
-                <Input label="Diplôme" value={edu.degree}
-                  onChange={(v) => upd("education", data.education.map((e) => e.id === edu.id ? { ...e, degree: v } : e))}
-                  placeholder="Master Informatique" />
-                <Input label="Spécialité" value={edu.field}
-                  onChange={(v) => upd("education", data.education.map((e) => e.id === edu.id ? { ...e, field: v } : e))}
-                  placeholder="IA & Data Science" />
+                <Input label="Diplôme" value={edu.degree} onChange={(v) => upd("education", data.education.map((e) => e.id === edu.id ? { ...e, degree: v } : e))} placeholder="Master Informatique" />
+                <Input label="Spécialité" value={edu.field} onChange={(v) => upd("education", data.education.map((e) => e.id === edu.id ? { ...e, field: v } : e))} placeholder="IA & Data Science" />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <Input label="École / Université" value={edu.institution}
-                  onChange={(v) => upd("education", data.education.map((e) => e.id === edu.id ? { ...e, institution: v } : e))}
-                  placeholder="Université de Genève" />
-                <Input label="Lieu" value={edu.location}
-                  onChange={(v) => upd("education", data.education.map((e) => e.id === edu.id ? { ...e, location: v } : e))}
-                  placeholder="Genève" />
+                <Input label="École / Université" value={edu.institution} onChange={(v) => upd("education", data.education.map((e) => e.id === edu.id ? { ...e, institution: v } : e))} placeholder="Université de Genève" />
+                <Input label="Lieu" value={edu.location} onChange={(v) => upd("education", data.education.map((e) => e.id === edu.id ? { ...e, location: v } : e))} placeholder="Genève" />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <Input label="Début (MM/AAAA)" value={edu.startDate}
-                  onChange={(v) => upd("education", data.education.map((e) => e.id === edu.id ? { ...e, startDate: v } : e))}
-                  placeholder="09/2020" />
-                <Input label="Fin (MM/AAAA)" value={edu.endDate}
-                  onChange={(v) => upd("education", data.education.map((e) => e.id === edu.id ? { ...e, endDate: v } : e))}
-                  placeholder="06/2022" />
+                <Input label="Début (MM/AAAA)" value={edu.startDate} onChange={(v) => upd("education", data.education.map((e) => e.id === edu.id ? { ...e, startDate: v } : e))} placeholder="09/2020" />
+                <Input label="Fin (MM/AAAA)" value={edu.endDate} onChange={(v) => upd("education", data.education.map((e) => e.id === edu.id ? { ...e, endDate: v } : e))} placeholder="06/2022" />
               </div>
               <Textarea label="Description (optionnel)" value={edu.description}
                 onChange={(v) => upd("education", data.education.map((e) => e.id === edu.id ? { ...e, description: v } : e))}
-                rows={2}
-                placeholder="Mention très bien, mémoire sur la robustesse des modèles…" />
+                rows={2} placeholder="Mention très bien, mémoire sur la robustesse des modèles…" />
             </Card>
           ))}
           <AddBtn onClick={() => upd("education", [...data.education, {
@@ -455,22 +446,18 @@ export default function CVBuilder({ onClose }: Props) {
         </div>
       );
 
-      /* ── Compétences ── */
       case "skills": return (
-        <div className="space-y-3 max-w-2xl">
+        <div className="space-y-3">
           {data.skills.map((sk) => (
             <div key={sk.id} className="flex items-center gap-3 rounded-xl px-4 py-3"
               style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.02)" }}>
               <div className="flex-1 grid grid-cols-2 gap-2">
-                <input value={sk.name}
-                  onChange={(e) => upd("skills", data.skills.map((s) => s.id === sk.id ? { ...s, name: e.target.value } : s))}
+                <input value={sk.name} onChange={(e) => upd("skills", data.skills.map((s) => s.id === sk.id ? { ...s, name: e.target.value } : s))}
                   placeholder="React" className={inputCls} style={{ ...inputSty, marginBottom: 0 }} />
-                <input value={sk.category}
-                  onChange={(e) => upd("skills", data.skills.map((s) => s.id === sk.id ? { ...s, category: e.target.value } : s))}
+                <input value={sk.category} onChange={(e) => upd("skills", data.skills.map((s) => s.id === sk.id ? { ...s, category: e.target.value } : s))}
                   placeholder="Catégorie (ex: Frontend)" className={inputCls} style={{ ...inputSty, marginBottom: 0 }} />
               </div>
-              <LevelPicker value={sk.level}
-                onChange={(v) => upd("skills", data.skills.map((s) => s.id === sk.id ? { ...s, level: v } : s))} />
+              <LevelPicker value={sk.level} onChange={(v) => upd("skills", data.skills.map((s) => s.id === sk.id ? { ...s, level: v } : s))} />
               <DeleteBtn onClick={() => upd("skills", data.skills.filter((s) => s.id !== sk.id))} />
             </div>
           ))}
@@ -479,14 +466,12 @@ export default function CVBuilder({ onClose }: Props) {
         </div>
       );
 
-      /* ── Langues ── */
       case "languages": return (
-        <div className="space-y-3 max-w-2xl">
+        <div className="space-y-3">
           {data.languages.map((l) => (
             <div key={l.id} className="flex items-center gap-3 rounded-xl px-4 py-3"
               style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.02)" }}>
-              <input value={l.name}
-                onChange={(e) => upd("languages", data.languages.map((lg) => lg.id === l.id ? { ...lg, name: e.target.value } : lg))}
+              <input value={l.name} onChange={(e) => upd("languages", data.languages.map((lg) => lg.id === l.id ? { ...lg, name: e.target.value } : lg))}
                 placeholder="Français" className={`${inputCls} flex-1`} style={{ ...inputSty, marginBottom: 0 }} />
               <select value={l.level}
                 onChange={(e) => upd("languages", data.languages.map((lg) => lg.id === l.id ? { ...lg, level: e.target.value as LanguageLevel } : lg))}
@@ -503,32 +488,23 @@ export default function CVBuilder({ onClose }: Props) {
         </div>
       );
 
-      /* ── Design ── */
       case "design": return (
-        <div className="space-y-6 max-w-2xl">
-          {/* Photo toggle */}
+        <div className="space-y-6">
           <div>
             <Label>Options de photo</Label>
             <div className="rounded-xl p-4" style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.02)" }}>
-              <Toggle
-                value={data.design.showPhoto}
-                onChange={(v) => updDesign("showPhoto", v)}
+              <Toggle value={data.design.showPhoto} onChange={(v) => updDesign("showPhoto", v)}
                 label="Inclure une photo"
-                desc="La photo apparaît dans le design du CV. Désactive pour un CV sans photo (souvent requis pour certaines candidatures en Suisse)."
-              />
+                desc="La photo apparaît dans le design du CV. Désactive pour un CV sans photo (souvent requis pour certaines candidatures en Suisse)." />
             </div>
           </div>
 
-          {/* ATS mode */}
           <div>
             <Label>Mode ATS</Label>
             <div className="space-y-3 rounded-xl p-4" style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.02)" }}>
-              <Toggle
-                value={data.design.atsMode}
-                onChange={(v) => updDesign("atsMode", v)}
+              <Toggle value={data.design.atsMode} onChange={(v) => updDesign("atsMode", v)}
                 label="Optimisé ATS (Applicant Tracking System)"
-                desc="Structure texte pur, compatible avec les logiciels de tri automatique utilisés par les RH. Désactive le design visuel et la photo."
-              />
+                desc="Structure texte pur, compatible avec les logiciels de tri automatique utilisés par les RH. Désactive le design visuel et la photo." />
               {data.design.atsMode && (
                 <div className="flex items-start gap-2 rounded-lg px-3 py-2.5"
                   style={{ background: "rgba(251,191,36,.08)", border: "1px solid rgba(251,191,36,.3)" }}>
@@ -539,24 +515,22 @@ export default function CVBuilder({ onClose }: Props) {
             </div>
           </div>
 
-          {/* Template */}
           <div style={{ opacity: data.design.atsMode ? .4 : 1, pointerEvents: data.design.atsMode ? "none" : "auto" }}>
             <Label>Template</Label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               {CV_TEMPLATES.map((t) => (
                 <button key={t.id} onClick={() => updDesign("template", t.id)}
-                  className="rounded-xl p-4 text-left transition-all"
+                  className="rounded-xl p-3 text-left transition-all"
                   style={data.design.template === t.id
                     ? { border: "1px solid var(--nebula)", background: "rgba(108,99,255,.1)" }
                     : { border: "1px solid var(--stroke)", background: "rgba(255,255,255,.02)" }}>
                   <p className="text-xs font-semibold" style={{ color: data.design.template === t.id ? "var(--halo)" : "var(--text)" }}>{t.label}</p>
-                  <p className="text-[10px] mt-1.5 leading-relaxed" style={{ color: "var(--muted)" }}>{t.desc}</p>
+                  <p className="text-[10px] mt-1" style={{ color: "var(--muted)" }}>{t.desc}</p>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Color */}
           <div style={{ opacity: data.design.atsMode ? .4 : 1, pointerEvents: data.design.atsMode ? "none" : "auto" }}>
             <Label>Couleur principale</Label>
             <div className="flex flex-wrap gap-2">
@@ -579,10 +553,12 @@ export default function CVBuilder({ onClose }: Props) {
 
   const fileName = `CV_${data.personal.firstName || "Prénom"}_${data.personal.lastName || "Nom"}.pdf`.replace(/\s+/g, "_");
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <>
-      {/* ── Main builder ── */}
-      <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "var(--bg)" }}>
+      {/* ── Main builder — split layout ── */}
+      <div className="fixed inset-0 flex flex-col" style={{ zIndex: 60, background: "var(--bg)" }}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 h-12 flex-shrink-0"
           style={{ borderBottom: "1px solid var(--stroke)", background: "var(--nav-bg)" }}>
@@ -598,60 +574,65 @@ export default function CVBuilder({ onClose }: Props) {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Preview button */}
-            <button
-              onClick={() => setShowPreview(true)}
+            <button onClick={() => setPreviewKey((k) => k + 1)}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition hover:opacity-80"
+              style={{ border: "1px solid var(--stroke)", color: "var(--muted)" }}>
+              <RefreshCw size={12} /> Actualiser
+            </button>
+            <button onClick={() => setShowPreview(true)}
               className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition hover:opacity-85"
               style={{ border: "1px solid var(--nebula)", background: "rgba(108,99,255,.08)", color: "var(--halo)" }}>
               <Eye size={12} /> Prévisualiser
             </button>
-
-            {/* Download */}
             <PDFDownloadLink document={<CVDocument data={data} />} fileName={fileName}>
               {({ loading }) => (
                 <button
                   className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-85"
                   style={{ background: "linear-gradient(135deg, var(--nebula), var(--indigo))", border: "1px solid rgba(108,99,255,.3)" }}>
-                  <Download size={12} />
-                  {loading ? "Génération…" : "Télécharger"}
+                  <Download size={12} /> {loading ? "Génération…" : "Télécharger"}
                 </button>
               )}
             </PDFDownloadLink>
           </div>
         </div>
 
-        {/* Tab bar */}
-        <div className="flex overflow-x-auto flex-shrink-0 px-4"
-          style={{ borderBottom: "1px solid var(--stroke)", background: "var(--nav-bg)" }}>
-          {TABS.map((t) => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className="px-4 py-3 text-xs font-medium whitespace-nowrap transition-all"
-              style={{
-                color: tab === t.id ? "var(--nebula)" : "var(--muted)",
-                borderBottom: tab === t.id ? "2px solid var(--nebula)" : "2px solid transparent",
-                marginBottom: "-1px",
-              }}>
-              {t.label}
-            </button>
-          ))}
-        </div>
+        {/* Body — form left, preview right */}
+        <div className="flex flex-1 min-h-0">
+          {/* Form panel */}
+          <div className="flex flex-col w-full max-w-lg flex-shrink-0" style={{ borderRight: "1px solid var(--stroke)" }}>
+            {/* Tabs */}
+            <div className="flex overflow-x-auto flex-shrink-0 px-2"
+              style={{ borderBottom: "1px solid var(--stroke)", background: "var(--nav-bg)" }}>
+              {TABS.map((t) => (
+                <button key={t.id} onClick={() => setTab(t.id)}
+                  className="px-3 py-2.5 text-[11px] font-medium whitespace-nowrap transition-all"
+                  style={{
+                    color: tab === t.id ? "var(--nebula)" : "var(--muted)",
+                    borderBottom: tab === t.id ? "2px solid var(--nebula)" : "2px solid transparent",
+                    marginBottom: "-1px",
+                  }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {/* Form content */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {renderTab()}
+            </div>
+          </div>
 
-        {/* Form content — full width, centered */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-6 py-6 mx-auto" style={{ maxWidth: 760 }}>
-            {renderTab()}
+          {/* Preview panel */}
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <PreviewPane data={data} triggerKey={previewKey} />
           </div>
         </div>
       </div>
 
-      {/* ── Preview popup (rendered on top, z-[60]) ── */}
+      {/* ── Full-screen preview popup ── */}
       {showPreview && (
-        <PreviewPopup
-          data={data}
-          onClose={() => setShowPreview(false)}
-          fileName={fileName}
-        />
+        <PreviewPopup data={data} onClose={() => setShowPreview(false)} fileName={fileName} />
       )}
-    </>
+    </>,
+    document.body
   );
 }
