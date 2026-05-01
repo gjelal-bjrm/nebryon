@@ -21,7 +21,6 @@ function checkBirthday(birthdate: string, now: Date): boolean {
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const dd = String(now.getDate()).padStart(2, "0");
   const today = `${mm}-${dd}`;
-  // birthdate may be "YYYY-MM-DD" → take last 5 chars
   const bdMmDd = birthdate.length >= 5 ? birthdate.slice(-5) : "";
   return bdMmDd === today;
 }
@@ -29,15 +28,18 @@ function checkBirthday(birthdate: string, now: Date): boolean {
 export interface GreetingData {
   firstName: string;
   salutation: string;
-  timeStr: string;
+  /** null until after client mount — prevents SSR/client hydration mismatch */
+  timeStr: string | null;
   isBirthday: boolean;
-  now: Date;
+  now: Date | null;
 }
 
 export function useGreeting(): GreetingData {
-  const [now, setNow] = useState(() => new Date());
+  // Start null so server and client render the same empty value on first pass
+  const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
+    setNow(new Date());
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
@@ -45,14 +47,12 @@ export function useGreeting(): GreetingData {
   const profile = useLiveQuery(() => db.profile.get("singleton"), []);
 
   const firstName  = profile?.firstName?.trim() ?? "";
-  const salutation = getSalutation(now.getHours());
-  const isBirthday = checkBirthday(profile?.birthdate ?? "", now);
+  const salutation = now ? getSalutation(now.getHours()) : "Bonjour";
+  const isBirthday = now ? checkBirthday(profile?.birthdate ?? "", now) : false;
 
-  const timeStr = now.toLocaleTimeString("fr", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  const timeStr = now
+    ? now.toLocaleTimeString("fr", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : null;
 
   return { firstName, salutation, timeStr, isBirthday, now };
 }
