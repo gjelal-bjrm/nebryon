@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { X, Plus } from "lucide-react";
 import { db } from "@/lib/orbit/db";
-import type { OrbitRequest } from "@/lib/orbit/types";
+import type { OrbitRequest, Folder } from "@/lib/orbit/types";
 
 interface Props {
   req: OrbitRequest;
@@ -18,10 +18,20 @@ export default function SaveDialog({ req, onClose, onSaved }: Props) {
     catch { return "Nouvelle requête"; }
   });
   const [collectionId, setCollectionId] = useState<string>("");
-  const [newColName, setNewColName] = useState("");
-  const [addingCol, setAddingCol] = useState(false);
+  const [folderId,     setFolderId]     = useState<string | null>(null);
+  const [newColName,   setNewColName]   = useState("");
+  const [addingCol,    setAddingCol]    = useState(false);
 
   const collections = useLiveQuery(() => db.collections.orderBy("createdAt").toArray(), []);
+  const folders     = useLiveQuery(
+    () => collectionId
+      ? db.folders.where("collectionId").equals(collectionId).sortBy("createdAt")
+      : Promise.resolve([] as Folder[]),
+    [collectionId]
+  );
+
+  // Reset folder when collection changes
+  useEffect(() => setFolderId(null), [collectionId]);
 
   const createCollection = async () => {
     const n = newColName.trim();
@@ -39,6 +49,7 @@ export default function SaveDialog({ req, onClose, onSaved }: Props) {
       ...req,
       id,
       collectionId,
+      folderId: folderId,
       name: name.trim(),
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -47,7 +58,22 @@ export default function SaveDialog({ req, onClose, onSaved }: Props) {
     onClose();
   };
 
-  const inputCls = "w-full rounded-lg px-3 py-2 text-xs focus:outline-none";
+  /** Build indented folder options */
+  function renderFolderOptions(
+    folders: Folder[],
+    parentId: string | null,
+    depth: number
+  ): React.ReactNode[] {
+    const children = folders.filter((f) => f.parentFolderId === parentId);
+    return children.flatMap((f) => [
+      <option key={f.id} value={f.id}>
+        {"  ".repeat(depth) + "📁 " + f.name}
+      </option>,
+      ...renderFolderOptions(folders, f.id, depth + 1),
+    ]);
+  }
+
+  const inputCls   = "w-full rounded-lg px-3 py-2 text-xs focus:outline-none";
   const inputStyle = { border: "1px solid var(--stroke)", background: "rgba(255,255,255,.03)", color: "var(--text)" };
 
   return (
@@ -61,8 +87,7 @@ export default function SaveDialog({ req, onClose, onSaved }: Props) {
         style={{ background: "var(--nav-bg)", border: "1px solid var(--stroke)" }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4"
-          style={{ borderBottom: "1px solid var(--stroke)" }}>
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid var(--stroke)" }}>
           <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Sauvegarder la requête</h2>
           <button onClick={onClose} className="transition hover:opacity-70" style={{ color: "var(--muted)" }}>
             <X size={16} />
@@ -73,13 +98,7 @@ export default function SaveDialog({ req, onClose, onSaved }: Props) {
           {/* Name */}
           <div>
             <label className="block text-[11px] mb-1" style={{ color: "var(--muted)" }}>Nom de la requête</label>
-            <input
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className={inputCls}
-              style={inputStyle}
-            />
+            <input autoFocus value={name} onChange={(e) => setName(e.target.value)} className={inputCls} style={inputStyle} />
           </div>
 
           {/* Collection */}
@@ -120,6 +139,22 @@ export default function SaveDialog({ req, onClose, onSaved }: Props) {
               ))}
             </select>
           </div>
+
+          {/* Folder — only shown when a collection is selected */}
+          {collectionId && (
+            <div>
+              <label className="block text-[11px] mb-1" style={{ color: "var(--muted)" }}>Dossier (optionnel)</label>
+              <select
+                value={folderId ?? ""}
+                onChange={(e) => setFolderId(e.target.value || null)}
+                className={inputCls}
+                style={inputStyle}
+              >
+                <option value="">Racine de la collection</option>
+                {folders && renderFolderOptions(folders, null, 0)}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Footer */}

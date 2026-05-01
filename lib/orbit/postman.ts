@@ -79,7 +79,9 @@ function parseMethod(m?: string): Method {
   return VALID.includes(u) ? u : "GET";
 }
 
-function convertRequest(item: PostmanItem): Omit<SavedRequest, "id" | "collectionId"> {
+type ReqData = Omit<SavedRequest, "id" | "collectionId" | "folderId">;
+
+function convertRequest(item: PostmanItem): ReqData {
   const req = item.request ?? {};
   const { urlStr, params } = parseUrl(req.url);
   const now = Date.now();
@@ -96,44 +98,62 @@ function convertRequest(item: PostmanItem): Omit<SavedRequest, "id" | "collectio
   };
 }
 
-/* ── Tree walker — one group per folder that holds requests ─ */
-export interface CollectionGroup {
-  collectionName: string;
-  requests: Omit<SavedRequest, "id" | "collectionId">[];
+/* ── Public result types ─────────────────────────────────── */
+export interface FolderImport {
+  /** Temporary UUID for building parent↔child relationships */
+  tempId: string;
+  name: string;
+  parentTempId: string | null;
+  /** Direct requests inside this folder (not in sub-folders) */
+  requests: ReqData[];
 }
 
-function walkFolder(items: PostmanItem[], pathParts: string[], out: CollectionGroup[]): void {
-  const directRequests = items.filter((i) => i.request);
-  const subFolders     = items.filter((i) => i.item && !i.request);
+export interface CollectionImport {
+  collectionName: string;
+  /** Requests at the root of the collection (no folder) */
+  rootRequests: ReqData[];
+  /** All folders (flat list, use parentTempId for hierarchy) */
+  folders: FolderImport[];
+}
 
-  if (directRequests.length > 0) {
-    out.push({
-      collectionName: pathParts.join(" › "),
-      requests: directRequests.map(convertRequest),
-    });
+/* ── Recursive walker ────────────────────────────────────── */
+/**
+ * Walk a list of Postman items.
+ * Returns the direct requests found at this level.
+ * Sub-folders are pushed into `allFolders` with the given `parentTempId`.
+ */
+function walkItems(
+  items: PostmanItem[],
+  parentTempId: string | null,
+  allFolders: FolderImport[]
+): ReqData[] {
+  const directRequests: ReqData[] = [];
+
+  for (const item of items) {
+    if (item.request) {
+      directRequests.push(convertRequest(item));
+    } else if (item.item) {
+      const tempId = crypto.randomUUID();
+      const folderDirectRequests = walkItems(item.item, tempId, allFolders);
+      allFolders.push({
+        tempId,
+        name: item.name,
+        parentTempId,
+        requests: folderDirectRequests,
+      });
+    }
   }
 
-  for (const folder of subFolders) {
-    walkFolder(folder.item!, [...pathParts, folder.name], out);
-  }
+  return directRequests;
 }
 
 /* ── Public API ──────────────────────────────────────────── */
-export function parsePostmanCollection(json: string): CollectionGroup[] {
+export function parsePostmanCollection(json: string): CollectionImport[] {
   const col = JSON.parse(json) as PostmanCollection;
   const rootName = col.info?.name ?? "Collection importée";
-  const groups: CollectionGroup[] = [];
 
-  // Root-level requests (not inside any folder)
-  const rootRequests = (col.item ?? []).filter((i) => i.request);
-  if (rootRequests.length > 0) {
-    groups.push({ collectionName: rootName, requests: rootRequests.map(convertRequest) });
-  }
+  const allFolders: FolderImport[] = [];
+  const rootRequests = walkItems(col.item ?? [], null, allFolders);
 
-  // Walk each top-level folder
-  for (const item of (col.item ?? []).filter((i) => i.item && !i.request)) {
-    walkFolder(item.item!, [item.name], groups);
-  }
-
-  return groups;
+  return [{ collectionName: rootName, rootRequests, folders: allFolders }];
 }

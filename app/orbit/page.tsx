@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useAutoBackup } from "@/hooks/useAutoBackup";
 import { writeBackup, isElectron } from "@/lib/orbit/autobackup";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -15,14 +15,50 @@ import { runRequest } from "@/lib/orbit/runner";
 import { defaultRequest } from "@/lib/orbit/types";
 import type { OrbitRequest, OrbitResponse, SavedRequest, Environment } from "@/lib/orbit/types";
 
-const EnvEditor    = dynamic(() => import("@/components/orbit/EnvEditor"),    { ssr: false });
+const EnvEditor     = dynamic(() => import("@/components/orbit/EnvEditor"),     { ssr: false });
 const ProfileEditor = dynamic(() => import("@/components/orbit/ProfileEditor"), { ssr: false });
 
+/* ── Resize hook ────────────────────────────────────────── */
+function useResize(
+  initial: number,
+  min: number,
+  max: number,
+  axis: "x" | "y",
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ref?: React.RefObject<any>
+) {
+  const [size, setSize] = useState(initial);
+  const dragging = useRef(false);
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragging.current = true;
+    const originSize = size;
+    const originPos  = axis === "x" ? e.clientX : e.clientY;
+
+    const onMove = (ev: MouseEvent) => {
+      if (!dragging.current) return;
+      const delta = (axis === "x" ? ev.clientX : ev.clientY) - originPos;
+      setSize(Math.max(min, Math.min(max, originSize + delta)));
+    };
+    const onUp = () => {
+      dragging.current = false;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, [size, min, max, axis]);
+
+  return { size, onMouseDown };
+}
+
+/* ── Main page ──────────────────────────────────────────── */
 export default function OrbitPage() {
-  const [req, setReq] = useState<OrbitRequest>(defaultRequest());
+  const [req,      setReq]      = useState<OrbitRequest>(defaultRequest());
   const [response, setResponse] = useState<OrbitResponse | null>(null);
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [sending,  setSending]  = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
 
   useAutoBackup();
 
@@ -36,10 +72,10 @@ export default function OrbitPage() {
     window.electronAPI!.onBeforeQuit(handler);
   }, []);
 
-  const [activeEnvId, setActiveEnvId] = useState<string | null>(null);
-  const [showEnvEditor,    setShowEnvEditor]    = useState(false);
-  const [showSaveDialog,   setShowSaveDialog]   = useState(false);
-  const [showProfile,      setShowProfile]      = useState(false);
+  const [activeEnvId,     setActiveEnvId]     = useState<string | null>(null);
+  const [showEnvEditor,   setShowEnvEditor]   = useState(false);
+  const [showSaveDialog,  setShowSaveDialog]  = useState(false);
+  const [showProfile,     setShowProfile]     = useState(false);
 
   const activeEnvRaw = useLiveQuery<Environment | undefined>(
     async () => activeEnvId ? db.environments.get(activeEnvId) : undefined,
@@ -47,6 +83,7 @@ export default function OrbitPage() {
   );
   const activeEnv = activeEnvRaw ?? null;
 
+  /* ── Send ───────────────────────────────────────────────── */
   const handleSend = useCallback(async () => {
     if (!req.url.trim() || sending) return;
     setSending(true);
@@ -63,32 +100,61 @@ export default function OrbitPage() {
   }, [req, sending, activeEnv]);
 
   const handleLoadRequest = useCallback((saved: SavedRequest) => {
-    const { id, collectionId, name, createdAt, updatedAt, ...orbitReq } = saved;
+    const { id, collectionId, folderId, name, createdAt, updatedAt, ...orbitReq } = saved;
     setReq(orbitReq);
     setResponse(null);
     setError(null);
   }, []);
 
+  /* ── Resizable panels ───────────────────────────────────── */
+  const sidebar = useResize(240, 160, 480, "x");
+  const reqPane = useResize(50,  20,   80, "y"); // percentage
+
   return (
-    <div className="flex flex-col h-screen overflow-hidden" style={{ background: "var(--bg)", color: "var(--text)" }}>
+    <div
+      className="flex flex-col h-screen overflow-hidden"
+      style={{ background: "var(--bg)", color: "var(--text)" }}
+    >
       {/* Topbar */}
       <OrbitTopbar onOpenProfile={() => setShowProfile(true)} />
 
       {/* Body */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <div className="w-60 flex-shrink-0 h-full overflow-hidden">
+      <div className="flex flex-1 overflow-hidden" style={{ userSelect: "none" }}>
+
+        {/* ── Sidebar ─────────────────────────────────────── */}
+        <div
+          className="flex-shrink-0 h-full overflow-hidden relative"
+          style={{ width: sidebar.size }}
+        >
           <Sidebar
             onLoadRequest={handleLoadRequest}
             activeEnvId={activeEnvId}
             onEnvChange={setActiveEnvId}
             onOpenEnvEditor={() => setShowEnvEditor(true)}
           />
+          {/* Sidebar resize handle */}
+          <div
+            onMouseDown={sidebar.onMouseDown}
+            className="absolute top-0 right-0 h-full w-1 cursor-col-resize z-10 transition-colors"
+            style={{ background: "transparent" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--nebula)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+          />
         </div>
 
-        {/* Main area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-hidden" style={{ borderBottom: "1px solid var(--stroke)" }}>
+        {/* ── Main area ───────────────────────────────────── */}
+        <div
+          className="flex-1 flex flex-col overflow-hidden"
+          style={{ userSelect: "none" }}
+        >
+          {/* Request panel */}
+          <div
+            className="overflow-hidden flex-shrink-0"
+            style={{
+              height: `${reqPane.size}%`,
+              borderBottom: "1px solid var(--stroke)",
+            }}
+          >
             <RequestPanel
               req={req}
               onChange={setReq}
@@ -97,6 +163,17 @@ export default function OrbitPage() {
               sending={sending}
             />
           </div>
+
+          {/* Vertical resize handle */}
+          <div
+            onMouseDown={reqPane.onMouseDown}
+            className="flex-shrink-0 h-1.5 cursor-row-resize transition-colors"
+            style={{ background: "var(--stroke)" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--nebula)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "var(--stroke)")}
+          />
+
+          {/* Response panel */}
           <div className="flex-1 overflow-hidden">
             <ResponsePanel response={response} loading={sending} error={error} />
           </div>
@@ -104,9 +181,9 @@ export default function OrbitPage() {
       </div>
 
       {/* Modals */}
-      {showEnvEditor && <EnvEditor onClose={() => setShowEnvEditor(false)} />}
-      {showSaveDialog && <SaveDialog req={req} onClose={() => setShowSaveDialog(false)} />}
-      {showProfile    && <ProfileEditor onClose={() => setShowProfile(false)} />}
+      {showEnvEditor  && <EnvEditor     onClose={() => setShowEnvEditor(false)}  />}
+      {showSaveDialog && <SaveDialog    req={req} onClose={() => setShowSaveDialog(false)} />}
+      {showProfile    && <ProfileEditor onClose={() => setShowProfile(false)}    />}
     </div>
   );
 }

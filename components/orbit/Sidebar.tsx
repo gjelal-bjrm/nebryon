@@ -2,10 +2,13 @@
 
 import { useState, useRef } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Plus, Folder, FileText, ChevronRight, Trash2, Settings2, Upload } from "lucide-react";
-import { db } from "@/lib/orbit/db";
+import {
+  Plus, Folder as FolderIcon, FileText, ChevronRight,
+  Trash2, Settings2, Upload, Edit2, Check, X, FolderPlus, Move,
+} from "lucide-react";
+import { db, deleteFolder } from "@/lib/orbit/db";
 import { parsePostmanCollection } from "@/lib/orbit/postman";
-import type { SavedRequest, Environment } from "@/lib/orbit/types";
+import type { SavedRequest, Folder, Environment, Collection } from "@/lib/orbit/types";
 
 interface Props {
   onLoadRequest: (req: SavedRequest) => void;
@@ -14,19 +17,20 @@ interface Props {
   onOpenEnvEditor: () => void;
 }
 
+/* ══════════════════════════════════════════════════════════
+   Main Sidebar
+══════════════════════════════════════════════════════════ */
 export default function Sidebar({ onLoadRequest, activeEnvId, onEnvChange, onOpenEnvEditor }: Props) {
-  const [openCols, setOpenCols] = useState<Set<string>>(new Set());
-  const [newColName, setNewColName] = useState("");
-  const [addingCol, setAddingCol] = useState(false);
-  const [importing, setImporting] = useState(false);
+  const [newColName, setNewColName]   = useState("");
+  const [addingCol,  setAddingCol]    = useState(false);
+  const [importing,  setImporting]    = useState(false);
+  const [movingReq,  setMovingReq]    = useState<SavedRequest | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
 
-  const collections = useLiveQuery(() => db.collections.orderBy("createdAt").toArray(), []);
+  const collections  = useLiveQuery(() => db.collections.orderBy("createdAt").toArray(), []);
   const environments = useLiveQuery(() => db.environments.orderBy("createdAt").toArray(), []);
 
-  const toggleCol = (id: string) =>
-    setOpenCols((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-
+  /* ── Create collection ─────────────────────────────────── */
   const createCollection = async () => {
     const name = newColName.trim();
     if (!name) return;
@@ -34,45 +38,115 @@ export default function Sidebar({ onLoadRequest, activeEnvId, onEnvChange, onOpe
     setNewColName(""); setAddingCol(false);
   };
 
+  /* ── Delete collection (cascade) ──────────────────────── */
   const deleteCollection = async (id: string) => {
+    const folderIds = (await db.folders.where("collectionId").equals(id).primaryKeys()) as string[];
     await db.requests.where("collectionId").equals(id).delete();
+    if (folderIds.length) await db.folders.bulkDelete(folderIds);
     await db.collections.delete(id);
   };
 
-  const deleteRequest = (id: string) => db.requests.delete(id);
-
+  /* ── Import ────────────────────────────────────────────── */
   const handleImport = async (files: FileList | null) => {
     if (!files?.[0]) return;
     setImporting(true);
     try {
       const text = await files[0].text();
       const json = JSON.parse(text);
-      const now = Date.now();
-      const newIds: string[] = [];
+      const now  = Date.now();
+      const newColIds: string[] = [];
 
-      if (json?.version === 2 && Array.isArray(json.collections)) {
-        // ── Orbit backup format ──────────────────────────────
+      if ((json?.version === 2 || json?.version === 3) && Array.isArray(json.collections)) {
+        /* ── Orbit backup format ────────────────────────── */
         for (let i = 0; i < json.collections.length; i++) {
-          const col = json.collections[i];
+          const col   = json.collections[i];
           const colId = crypto.randomUUID();
           await db.collections.add({ ...col, id: colId, createdAt: now + i });
-          const reqs = (json.requests as SavedRequest[]).filter((r) => r.collectionId === col.id);
-          await db.requests.bulkAdd(reqs.map((r) => ({ ...r, id: crypto.randomUUID(), collectionId: colId })));
-          newIds.push(colId);
+
+          if (json.version === 3 && Array.isArray(json.folders)) {
+            // Build old-id → new-id map for this collection's folders
+            const colFolders = (json.folders as Folder[]).filter((f) => f.collectionId === col.id);
+            const oldToNew: Record<string, string> = {};
+            for (const f of colFolders) oldToNew[f.id] = crypto.randomUUID();
+
+            if (colFolders.length) {
+              await db.folders.bulkAdd(
+                colFolders.map((f, fi) => ({
+                  ...f,
+                  id: oldToNew[f.id],
+                  collectionId: colId,
+                  parentFolderId: f.parentFolderId ? (oldToNew[f.parentFolderId] ?? null) : null,
+                  createdAt: now + fi,
+                }))
+              );
+            }
+
+            const colReqs = (json.requests as SavedRequest[]).filter((r) => r.collectionId === col.id);
+            if (colReqs.length) {
+              await db.requests.bulkAdd(
+                colReqs.map((r) => ({
+                  ...r,
+                  id: crypto.randomUUID(),
+                  collectionId: colId,
+                  folderId: r.folderId ? (oldToNew[r.folderId] ?? null) : null,
+                }))
+              );
+            }
+          } else {
+            // Version 2 — no folders
+            const colReqs = (json.requests as SavedRequest[]).filter((r) => r.collectionId === col.id);
+            if (colReqs.length) {
+              await db.requests.bulkAdd(
+                colReqs.map((r) => ({ ...r, id: crypto.randomUUID(), collectionId: colId, folderId: null }))
+              );
+            }
+          }
+          newColIds.push(colId);
         }
       } else {
-        // ── Postman format ───────────────────────────────────
-        const groups = parsePostmanCollection(text);
-        for (let i = 0; i < groups.length; i++) {
-          const { collectionName, requests } = groups[i];
+        /* ── Postman format ─────────────────────────────── */
+        const imports = parsePostmanCollection(text);
+        for (let i = 0; i < imports.length; i++) {
+          const imp   = imports[i];
           const colId = crypto.randomUUID();
-          await db.collections.add({ id: colId, name: collectionName, createdAt: now + i });
-          await db.requests.bulkAdd(requests.map((r) => ({ ...r, id: crypto.randomUUID(), collectionId: colId })));
-          newIds.push(colId);
+          await db.collections.add({ id: colId, name: imp.collectionName, createdAt: now + i });
+
+          // Build tempId → real UUID map
+          const tempToReal: Record<string, string> = {};
+          for (const f of imp.folders) tempToReal[f.tempId] = crypto.randomUUID();
+
+          if (imp.folders.length) {
+            await db.folders.bulkAdd(
+              imp.folders.map((f, fi) => ({
+                id: tempToReal[f.tempId],
+                collectionId: colId,
+                parentFolderId: f.parentTempId ? (tempToReal[f.parentTempId] ?? null) : null,
+                name: f.name,
+                createdAt: now + fi,
+              }))
+            );
+            for (const f of imp.folders) {
+              if (f.requests.length) {
+                await db.requests.bulkAdd(
+                  f.requests.map((r) => ({
+                    ...r,
+                    id: crypto.randomUUID(),
+                    collectionId: colId,
+                    folderId: tempToReal[f.tempId],
+                  }))
+                );
+              }
+            }
+          }
+
+          if (imp.rootRequests.length) {
+            await db.requests.bulkAdd(
+              imp.rootRequests.map((r) => ({ ...r, id: crypto.randomUUID(), collectionId: colId, folderId: null }))
+            );
+          }
+          newColIds.push(colId);
         }
       }
-
-      setOpenCols((s) => { const n = new Set(s); newIds.forEach((id) => n.add(id)); return n; });
     } catch (e) {
       console.error("Import failed", e);
     } finally {
@@ -98,15 +172,27 @@ export default function Sidebar({ onLoadRequest, activeEnvId, onEnvChange, onOpe
             >
               <Upload size={13} />
             </button>
-            <button onClick={() => setAddingCol(true)} className="transition hover:opacity-80" style={{ color: "var(--nebula)" }}>
+            <button
+              onClick={() => setAddingCol(true)}
+              className="transition hover:opacity-80"
+              style={{ color: "var(--nebula)" }}
+              title="Nouvelle collection"
+            >
               <Plus size={14} />
             </button>
           </div>
         </div>
-        <input ref={importRef} type="file" accept=".json" className="hidden" onChange={(e) => handleImport(e.target.files)} />
+
+        <input
+          ref={importRef} type="file" accept=".json" className="hidden"
+          onChange={(e) => handleImport(e.target.files)}
+        />
 
         {addingCol && (
-          <form onSubmit={(e) => { e.preventDefault(); createCollection(); }} className="mb-2 flex gap-1">
+          <form
+            onSubmit={(e) => { e.preventDefault(); createCollection(); }}
+            className="mb-2 flex gap-1"
+          >
             <input
               autoFocus value={newColName} onChange={(e) => setNewColName(e.target.value)}
               placeholder="Nom…"
@@ -119,13 +205,12 @@ export default function Sidebar({ onLoadRequest, activeEnvId, onEnvChange, onOpe
         )}
 
         {collections?.map((col) => (
-          <CollectionRow
-            key={col.id} col={col}
-            open={openCols.has(col.id)}
-            onToggle={() => toggleCol(col.id)}
-            onDelete={() => deleteCollection(col.id)}
+          <CollectionNode
+            key={col.id}
+            col={col}
             onLoadRequest={onLoadRequest}
-            onDeleteRequest={deleteRequest}
+            onDelete={() => deleteCollection(col.id)}
+            onMoveRequest={setMovingReq}
           />
         ))}
 
@@ -156,61 +241,448 @@ export default function Sidebar({ onLoadRequest, activeEnvId, onEnvChange, onOpe
           ))}
         </select>
       </div>
+
+      {/* Move Modal */}
+      {movingReq && (
+        <MoveModal
+          item={movingReq}
+          onClose={() => setMovingReq(null)}
+        />
+      )}
     </aside>
   );
 }
 
-/* ── Collection row ────────────────────────────────────── */
-function CollectionRow({ col, open, onToggle, onDelete, onLoadRequest, onDeleteRequest }: {
-  col: { id: string; name: string };
-  open: boolean;
-  onToggle: () => void;
-  onDelete: () => void;
+/* ══════════════════════════════════════════════════════════
+   Collection Node
+══════════════════════════════════════════════════════════ */
+function CollectionNode({
+  col, onLoadRequest, onDelete, onMoveRequest,
+}: {
+  col: Collection;
   onLoadRequest: (r: SavedRequest) => void;
-  onDeleteRequest: (id: string) => void;
+  onDelete: () => void;
+  onMoveRequest: (r: SavedRequest) => void;
 }) {
-  const requests = useLiveQuery<SavedRequest[]>(
-    () => open ? db.requests.where("collectionId").equals(col.id).sortBy("createdAt") : Promise.resolve([] as SavedRequest[]),
-    [col.id, open]
-  );
+  const [open,        setOpen]        = useState(false);
+  const [editing,     setEditing]     = useState(false);
+  const [editName,    setEditName]    = useState(col.name);
+  const [creating,    setCreating]    = useState<"folder" | "request" | null>(null);
+  const [newName,     setNewName]     = useState("");
+
+  // Load all folders + requests for this collection when open
+  const data = useLiveQuery(async () => {
+    if (!open) return null;
+    const [folders, requests] = await Promise.all([
+      db.folders.where("collectionId").equals(col.id).sortBy("createdAt"),
+      db.requests.where("collectionId").equals(col.id).sortBy("createdAt"),
+    ]);
+    return { folders, requests };
+  }, [col.id, open]);
+
+  const saveRename = async () => {
+    const name = editName.trim();
+    if (name) await db.collections.update(col.id, { name });
+    setEditing(false);
+  };
+
+  const createItem = async () => {
+    const name = newName.trim();
+    if (!name) { setCreating(null); return; }
+    const now = Date.now();
+    if (creating === "folder") {
+      await db.folders.add({ id: crypto.randomUUID(), collectionId: col.id, parentFolderId: null, name, createdAt: now });
+    } else {
+      // Save as blank GET request at collection root
+      await db.requests.add({
+        id: crypto.randomUUID(), collectionId: col.id, folderId: null, name,
+        method: "GET", url: "", params: [], headers: [],
+        body: { type: "none", content: "" },
+        auth: { type: "none", bearer: "", basicUser: "", basicPass: "", apiKeyName: "X-API-Key", apiKeyValue: "", apiKeyIn: "header" },
+        createdAt: now, updatedAt: now,
+      });
+    }
+    setNewName(""); setCreating(null);
+  };
+
+  const rootRequests = data?.requests.filter((r) => (r.folderId ?? null) === null) ?? [];
+  const rootFolders  = data?.folders.filter((f) => f.parentFolderId === null) ?? [];
 
   return (
     <div className="mb-1">
+      {/* Header row */}
       <div
-        className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 cursor-pointer group transition"
-        style={{ color: "var(--text)" }}
+        className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 cursor-pointer group transition select-none"
         onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(108,99,255,.08)")}
         onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
       >
-        <ChevronRight size={12} className="flex-shrink-0 transition-transform" style={{ transform: open ? "rotate(90deg)" : "none", color: "var(--muted)" }} onClick={onToggle} />
-        <Folder size={13} style={{ color: "var(--nebula)", flexShrink: 0 }} onClick={onToggle} />
-        <span className="flex-1 text-xs truncate" onClick={onToggle}>{col.name}</span>
-        <button onClick={onDelete} className="opacity-0 group-hover:opacity-100 transition" style={{ color: "var(--muted)" }}>
-          <Trash2 size={11} />
-        </button>
+        <ChevronRight
+          size={12} className="flex-shrink-0 transition-transform"
+          style={{ transform: open ? "rotate(90deg)" : "none", color: "var(--muted)" }}
+          onClick={() => setOpen((o) => !o)}
+        />
+        <FolderIcon size={13} style={{ color: "var(--nebula)", flexShrink: 0 }} onClick={() => setOpen((o) => !o)} />
+
+        {editing ? (
+          <form onSubmit={(e) => { e.preventDefault(); saveRename(); }} className="flex-1 flex gap-1">
+            <input
+              autoFocus value={editName} onChange={(e) => setEditName(e.target.value)}
+              className="flex-1 rounded px-1.5 text-xs focus:outline-none"
+              style={{ border: "1px solid var(--nebula)", background: "rgba(108,99,255,.08)", color: "var(--text)" }}
+              onKeyDown={(e) => e.key === "Escape" && setEditing(false)}
+            />
+            <button type="submit"><Check size={11} style={{ color: "var(--nebula)" }} /></button>
+            <button type="button" onClick={() => setEditing(false)}><X size={11} style={{ color: "var(--muted)" }} /></button>
+          </form>
+        ) : (
+          <span className="flex-1 text-xs truncate font-medium" style={{ color: "var(--text)" }} onClick={() => setOpen((o) => !o)}>
+            {col.name}
+          </span>
+        )}
+
+        {!editing && (
+          <div className="opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
+            <button onClick={() => { setCreating("folder"); setOpen(true); }} title="Nouveau dossier" style={{ color: "var(--muted)" }}>
+              <FolderPlus size={11} />
+            </button>
+            <button onClick={() => { setCreating("request"); setOpen(true); }} title="Nouvelle requête" style={{ color: "var(--muted)" }}>
+              <Plus size={11} />
+            </button>
+            <button onClick={() => { setEditing(true); setEditName(col.name); }} style={{ color: "var(--muted)" }}>
+              <Edit2 size={11} />
+            </button>
+            <button onClick={onDelete} style={{ color: "var(--muted)" }}>
+              <Trash2 size={11} />
+            </button>
+          </div>
+        )}
       </div>
 
-      {open && requests?.map((req) => (
-        <div
-          key={req.id}
-          className="flex items-center gap-1.5 rounded-lg px-2 py-1 ml-4 cursor-pointer group transition"
-          onClick={() => onLoadRequest(req)}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(108,99,255,.06)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-        >
-          <FileText size={11} className="flex-shrink-0" style={{ color: "var(--muted)" }} />
-          <MethodBadge method={req.method} />
-          <span className="flex-1 text-[11px] truncate" style={{ color: "var(--muted)" }}>{req.name}</span>
-          <button onClick={(e) => { e.stopPropagation(); onDeleteRequest(req.id); }}
-            className="opacity-0 group-hover:opacity-100 transition" style={{ color: "var(--muted)" }}>
-            <Trash2 size={10} />
-          </button>
+      {/* Children */}
+      {open && (
+        <div className="ml-4">
+          {/* Inline creator */}
+          {creating && (
+            <form onSubmit={(e) => { e.preventDefault(); createItem(); }} className="mb-1 flex gap-1 pr-1">
+              <input
+                autoFocus value={newName} onChange={(e) => setNewName(e.target.value)}
+                placeholder={creating === "folder" ? "Nom du dossier…" : "Nom de la requête…"}
+                className="flex-1 rounded-lg px-2 py-1 text-xs focus:outline-none"
+                style={{ border: "1px solid var(--nebula)", background: "rgba(108,99,255,.08)", color: "var(--text)" }}
+                onKeyDown={(e) => e.key === "Escape" && (setCreating(null), setNewName(""))}
+              />
+              <button type="submit" className="text-xs px-2 rounded-lg" style={{ background: "var(--nebula)", color: "#fff" }}>OK</button>
+            </form>
+          )}
+
+          {/* Root requests */}
+          {rootRequests.map((req) => (
+            <RequestRow key={req.id} req={req} depth={0} onLoad={onLoadRequest} onMove={onMoveRequest} />
+          ))}
+
+          {/* Root folders */}
+          {rootFolders.map((folder) => (
+            <FolderNode
+              key={folder.id}
+              folder={folder}
+              allFolders={data?.folders ?? []}
+              allRequests={data?.requests ?? []}
+              depth={0}
+              onLoadRequest={onLoadRequest}
+              onMoveRequest={onMoveRequest}
+            />
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }
 
+/* ══════════════════════════════════════════════════════════
+   Folder Node (recursive)
+══════════════════════════════════════════════════════════ */
+function FolderNode({
+  folder, allFolders, allRequests, depth, onLoadRequest, onMoveRequest,
+}: {
+  folder: Folder;
+  allFolders: Folder[];
+  allRequests: SavedRequest[];
+  depth: number;
+  onLoadRequest: (r: SavedRequest) => void;
+  onMoveRequest: (r: SavedRequest) => void;
+}) {
+  const [open,     setOpen]     = useState(false);
+  const [editing,  setEditing]  = useState(false);
+  const [editName, setEditName] = useState(folder.name);
+  const [creating, setCreating] = useState<"folder" | "request" | null>(null);
+  const [newName,  setNewName]  = useState("");
+
+  const childFolders   = allFolders.filter((f) => f.parentFolderId === folder.id);
+  const childRequests  = allRequests.filter((r) => (r.folderId ?? null) === folder.id);
+
+  const saveRename = async () => {
+    const name = editName.trim();
+    if (name) await db.folders.update(folder.id, { name });
+    setEditing(false);
+  };
+
+  const createItem = async () => {
+    const name = newName.trim();
+    if (!name) { setCreating(null); return; }
+    const now = Date.now();
+    if (creating === "folder") {
+      await db.folders.add({
+        id: crypto.randomUUID(), collectionId: folder.collectionId,
+        parentFolderId: folder.id, name, createdAt: now,
+      });
+    } else {
+      await db.requests.add({
+        id: crypto.randomUUID(), collectionId: folder.collectionId, folderId: folder.id, name,
+        method: "GET", url: "", params: [], headers: [],
+        body: { type: "none", content: "" },
+        auth: { type: "none", bearer: "", basicUser: "", basicPass: "", apiKeyName: "X-API-Key", apiKeyValue: "", apiKeyIn: "header" },
+        createdAt: now, updatedAt: now,
+      });
+    }
+    setNewName(""); setCreating(null);
+  };
+
+  const handleDelete = async () => {
+    await deleteFolder(folder.id);
+  };
+
+  return (
+    <div className="mb-0.5">
+      <div
+        className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 cursor-pointer group transition select-none"
+        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(108,99,255,.07)")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+      >
+        <ChevronRight
+          size={11} className="flex-shrink-0 transition-transform"
+          style={{ transform: open ? "rotate(90deg)" : "none", color: "var(--muted)" }}
+          onClick={() => setOpen((o) => !o)}
+        />
+        <FolderIcon size={12} style={{ color: "var(--halo)", flexShrink: 0 }} onClick={() => setOpen((o) => !o)} />
+
+        {editing ? (
+          <form onSubmit={(e) => { e.preventDefault(); saveRename(); }} className="flex-1 flex gap-1">
+            <input
+              autoFocus value={editName} onChange={(e) => setEditName(e.target.value)}
+              className="flex-1 rounded px-1.5 text-xs focus:outline-none"
+              style={{ border: "1px solid var(--nebula)", background: "rgba(108,99,255,.08)", color: "var(--text)" }}
+              onKeyDown={(e) => e.key === "Escape" && setEditing(false)}
+            />
+            <button type="submit"><Check size={11} style={{ color: "var(--nebula)" }} /></button>
+            <button type="button" onClick={() => setEditing(false)}><X size={11} style={{ color: "var(--muted)" }} /></button>
+          </form>
+        ) : (
+          <span className="flex-1 text-xs truncate" style={{ color: "var(--text)" }} onClick={() => setOpen((o) => !o)}>
+            {folder.name}
+          </span>
+        )}
+
+        {!editing && (
+          <div className="opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
+            <button onClick={() => { setCreating("folder"); setOpen(true); }} title="Sous-dossier" style={{ color: "var(--muted)" }}>
+              <FolderPlus size={10} />
+            </button>
+            <button onClick={() => { setCreating("request"); setOpen(true); }} title="Nouvelle requête" style={{ color: "var(--muted)" }}>
+              <Plus size={10} />
+            </button>
+            <button onClick={() => { setEditing(true); setEditName(folder.name); }} style={{ color: "var(--muted)" }}>
+              <Edit2 size={10} />
+            </button>
+            <button onClick={handleDelete} style={{ color: "var(--muted)" }}>
+              <Trash2 size={10} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {open && (
+        <div className="ml-4">
+          {creating && (
+            <form onSubmit={(e) => { e.preventDefault(); createItem(); }} className="mb-1 flex gap-1 pr-1">
+              <input
+                autoFocus value={newName} onChange={(e) => setNewName(e.target.value)}
+                placeholder={creating === "folder" ? "Nom du dossier…" : "Nom de la requête…"}
+                className="flex-1 rounded-lg px-2 py-1 text-xs focus:outline-none"
+                style={{ border: "1px solid var(--nebula)", background: "rgba(108,99,255,.08)", color: "var(--text)" }}
+                onKeyDown={(e) => e.key === "Escape" && (setCreating(null), setNewName(""))}
+              />
+              <button type="submit" className="text-xs px-2 rounded-lg" style={{ background: "var(--nebula)", color: "#fff" }}>OK</button>
+            </form>
+          )}
+
+          {childRequests.map((req) => (
+            <RequestRow key={req.id} req={req} depth={depth + 1} onLoad={onLoadRequest} onMove={onMoveRequest} />
+          ))}
+
+          {childFolders.map((sub) => (
+            <FolderNode
+              key={sub.id}
+              folder={sub}
+              allFolders={allFolders}
+              allRequests={allRequests}
+              depth={depth + 1}
+              onLoadRequest={onLoadRequest}
+              onMoveRequest={onMoveRequest}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   Request Row
+══════════════════════════════════════════════════════════ */
+function RequestRow({
+  req, depth, onLoad, onMove,
+}: {
+  req: SavedRequest;
+  depth: number;
+  onLoad: (r: SavedRequest) => void;
+  onMove: (r: SavedRequest) => void;
+}) {
+  const [editing,  setEditing]  = useState(false);
+  const [editName, setEditName] = useState(req.name);
+
+  const saveRename = async () => {
+    const name = editName.trim();
+    if (name) await db.requests.update(req.id, { name, updatedAt: Date.now() });
+    setEditing(false);
+  };
+
+  return (
+    <div
+      className="flex items-center gap-1.5 rounded-lg px-2 py-1 cursor-pointer group transition"
+      onClick={() => !editing && onLoad(req)}
+      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(108,99,255,.05)")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+    >
+      <FileText size={10} className="flex-shrink-0" style={{ color: "var(--muted)" }} />
+      <MethodBadge method={req.method} />
+
+      {editing ? (
+        <form onSubmit={(e) => { e.preventDefault(); saveRename(); }} className="flex-1 flex gap-1"
+          onClick={(e) => e.stopPropagation()}>
+          <input
+            autoFocus value={editName} onChange={(e) => setEditName(e.target.value)}
+            className="flex-1 rounded px-1.5 text-[11px] focus:outline-none"
+            style={{ border: "1px solid var(--nebula)", background: "rgba(108,99,255,.08)", color: "var(--text)" }}
+            onKeyDown={(e) => e.key === "Escape" && setEditing(false)}
+          />
+          <button type="submit" onClick={(e) => e.stopPropagation()}>
+            <Check size={10} style={{ color: "var(--nebula)" }} />
+          </button>
+        </form>
+      ) : (
+        <span className="flex-1 text-[11px] truncate" style={{ color: "var(--muted)" }}>{req.name}</span>
+      )}
+
+      {!editing && (
+        <div className="opacity-0 group-hover:opacity-100 transition flex items-center gap-0.5"
+          onClick={(e) => e.stopPropagation()}>
+          <button onClick={() => { setEditing(true); setEditName(req.name); }} style={{ color: "var(--muted)" }}>
+            <Edit2 size={9} />
+          </button>
+          <button onClick={() => onMove(req)} style={{ color: "var(--muted)" }} title="Déplacer">
+            <Move size={9} />
+          </button>
+          <button onClick={() => db.requests.delete(req.id)} style={{ color: "var(--muted)" }}>
+            <Trash2 size={9} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   Move Modal
+══════════════════════════════════════════════════════════ */
+function MoveModal({ item, onClose }: { item: SavedRequest; onClose: () => void }) {
+  const collections = useLiveQuery(() => db.collections.orderBy("createdAt").toArray(), []);
+  const allFolders  = useLiveQuery(() => db.folders.orderBy("createdAt").toArray(), []);
+
+  const doMove = async (colId: string, folderId: string | null) => {
+    await db.requests.update(item.id, { collectionId: colId, folderId, updatedAt: Date.now() });
+    onClose();
+  };
+
+  /** Build a flat sorted list of (collection, folder?) destinations */
+  interface Dest { label: string; colId: string; folderId: string | null; depth: number; }
+  function buildDestinations(): Dest[] {
+    if (!collections || !allFolders) return [];
+    const out: Dest[] = [];
+
+    function walkFolders(folders: Folder[], parentId: string | null, colId: string, depth: number) {
+      const children = folders.filter((f) => f.collectionId === colId && f.parentFolderId === parentId);
+      for (const f of children) {
+        out.push({ label: f.name, colId, folderId: f.id, depth });
+        walkFolders(folders, f.id, colId, depth + 1);
+      }
+    }
+
+    for (const col of collections) {
+      out.push({ label: col.name, colId: col.id, folderId: null, depth: 0 });
+      walkFolders(allFolders, null, col.id, 1);
+    }
+    return out;
+  }
+
+  const destinations = buildDestinations();
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,.6)", backdropFilter: "blur(4px)" }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="w-full max-w-xs rounded-2xl flex flex-col overflow-hidden"
+        style={{ background: "var(--nav-bg)", border: "1px solid var(--stroke)", maxHeight: "70vh" }}>
+
+        <div className="flex items-center justify-between px-4 py-3 flex-shrink-0"
+          style={{ borderBottom: "1px solid var(--stroke)" }}>
+          <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+            Déplacer « {item.name} »
+          </span>
+          <button onClick={onClose} style={{ color: "var(--muted)" }}><X size={15} /></button>
+        </div>
+
+        <div className="overflow-y-auto p-2">
+          {destinations.map((d, i) => {
+            const isCurrent = d.colId === item.collectionId && d.folderId === (item.folderId ?? null);
+            return (
+              <button
+                key={i}
+                disabled={isCurrent}
+                onClick={() => doMove(d.colId, d.folderId)}
+                className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-left transition hover:opacity-80 disabled:opacity-40"
+                style={{
+                  paddingLeft: `${12 + d.depth * 16}px`,
+                  background: isCurrent ? "rgba(108,99,255,.12)" : "transparent",
+                  color: d.folderId === null ? "var(--text)" : "var(--muted)",
+                }}
+              >
+                {d.folderId === null
+                  ? <FolderIcon size={12} style={{ color: "var(--nebula)", flexShrink: 0 }} />
+                  : <FolderIcon size={11} style={{ color: "var(--halo)", flexShrink: 0 }} />}
+                <span className="truncate">{d.label}</span>
+                {d.folderId === null && <span className="text-[10px] ml-auto opacity-50">racine</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   Method Badge (exported for use elsewhere)
+══════════════════════════════════════════════════════════ */
 export function MethodBadge({ method }: { method: string }) {
   const colors: Record<string, string> = {
     GET: "#22c55e", POST: "#6C63FF", PUT: "#D4A84B",

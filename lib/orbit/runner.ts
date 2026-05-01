@@ -8,6 +8,9 @@ function applyEnv(str: string, vars: KVPair[]): string {
   });
 }
 
+const isElectronCtx = () =>
+  typeof window !== "undefined" && typeof (window as any).electronAPI !== "undefined";
+
 export async function runRequest(
   req: OrbitRequest,
   env: Environment | null
@@ -43,13 +46,14 @@ export async function runRequest(
     if (auth.apiKeyIn === "header") {
       headers[applyEnv(auth.apiKeyName, vars)] = applyEnv(auth.apiKeyValue, vars);
     } else {
-      url += (url.includes("?") ? "&" : "?") +
+      url +=
+        (url.includes("?") ? "&" : "?") +
         `${encodeURIComponent(applyEnv(auth.apiKeyName, vars))}=${encodeURIComponent(applyEnv(auth.apiKeyValue, vars))}`;
     }
   }
 
   /* ── Body ───────────────────────────────────────────────── */
-  let body: BodyInit | undefined;
+  let body: string | undefined;
   const { type: bodyType, content } = req.body;
 
   if (bodyType === "json" && content) {
@@ -63,34 +67,60 @@ export async function runRequest(
     body = applyEnv(content, vars);
   }
 
-  /* ── Fetch ──────────────────────────────────────────────── */
+  const isNoBody = ["GET", "HEAD"].includes(req.method);
+
+  /* ── Electron: direct fetch (no CORS) ──────────────────── */
+  if (isElectronCtx()) {
+    const start = performance.now();
+    const res = await fetch(url, {
+      method: req.method,
+      headers,
+      body: isNoBody ? undefined : body,
+    });
+    const time = Math.round(performance.now() - start);
+    const resBodyRaw = await res.text();
+    const contentType = res.headers.get("content-type") ?? "";
+    const resHeaders: Record<string, string> = {};
+    res.headers.forEach((v, k) => { resHeaders[k] = v; });
+
+    return {
+      status: res.status,
+      statusText: res.statusText,
+      time,
+      size: new TextEncoder().encode(resBodyRaw).byteLength,
+      headers: resHeaders,
+      body: resBodyRaw,
+      contentType,
+    };
+  }
+
+  /* ── Browser: route through server proxy (no CORS) ──────── */
   const start = performance.now();
-
-  const res = await fetch(url, {
-    method: req.method,
-    headers,
-    body: ["GET", "HEAD"].includes(req.method) ? undefined : body,
+  const proxyRes = await fetch("/api/orbit/proxy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      url,
+      method: req.method,
+      headers,
+      body: isNoBody ? undefined : body,
+    }),
   });
+  const clientTime = Math.round(performance.now() - start);
 
-  const time = Math.round(performance.now() - start);
+  if (!proxyRes.ok) {
+    const err = await proxyRes.json().catch(() => ({ error: `Proxy error ${proxyRes.status}` }));
+    throw new Error(err.error ?? `Proxy error ${proxyRes.status}`);
+  }
 
-  /* ── Response body ──────────────────────────────────────── */
-  const resBodyRaw = await res.text();
-  const contentType = res.headers.get("content-type") ?? "";
-
-  /* ── Response headers ───────────────────────────────────── */
-  const resHeaders: Record<string, string> = {};
-  res.headers.forEach((v, k) => { resHeaders[k] = v; });
-
-  const size = new TextEncoder().encode(resBodyRaw).byteLength;
-
+  const data = await proxyRes.json();
   return {
-    status: res.status,
-    statusText: res.statusText,
-    time,
-    size,
-    headers: resHeaders,
-    body: resBodyRaw,
-    contentType,
+    status:     data.status      ?? 0,
+    statusText: data.statusText  ?? "",
+    time:       data.time        ?? clientTime,
+    size:       data.size        ?? 0,
+    headers:    data.headers     ?? {},
+    body:       data.body        ?? "",
+    contentType: (data.headers?.["content-type"] as string) ?? "",
   };
 }
