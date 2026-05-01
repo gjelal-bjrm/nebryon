@@ -52,9 +52,20 @@ export interface Collection {
   createdAt: number;
 }
 
+/** A folder lives inside a collection; parentFolderId=null → root of collection */
+export interface Folder {
+  id: string;
+  collectionId: string;
+  parentFolderId: string | null;
+  name: string;
+  createdAt: number;
+}
+
 export interface SavedRequest extends OrbitRequest {
   id: string;
   collectionId: string;
+  /** null = at root of the collection (no folder) */
+  folderId: string | null;
   name: string;
   createdAt: number;
   updatedAt: number;
@@ -85,9 +96,11 @@ export function defaultProfile(): Profile {
 
 /* ── Backup ─────────────────────────────────────────────── */
 export interface OrbitBackup {
-  version: 2;
+  version: 2 | 3;
   exportedAt: string;
   collections: Collection[];
+  /** v3+ only — folder tree */
+  folders: Folder[];
   requests: SavedRequest[];
   environments: Environment[];
   profile: Profile | null;
