@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { projects } from "@/lib/projects";
 import { motion, useReducedMotion } from "framer-motion";
 
@@ -18,8 +19,7 @@ export default function Projects() {
           <motion.a
             key={p.title}
             href={p.href}
-            target="_blank"
-            rel="noreferrer"
+            {...(p.type === "showcase" ? {} : { target: "_blank", rel: "noreferrer" })}
             className="group rounded-2xl border p-5 backdrop-blur transition"
             style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.02)" }}
             onMouseEnter={(e) => {
@@ -43,7 +43,9 @@ export default function Projects() {
           >
             <div className="flex items-center justify-between gap-3">
               <h3 className="font-semibold tracking-tight">{p.title}</h3>
-              <span className="transition" style={{ color: "var(--muted)" }}>↗</span>
+              <span className="transition" style={{ color: "var(--muted)" }}>
+                {p.type === "showcase" ? "→" : "↗"}
+              </span>
             </div>
 
             <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
