@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Plus, Folder, FileText, ChevronRight, Trash2, Settings2 } from "lucide-react";
+import { Plus, Folder, FileText, ChevronRight, Trash2, Settings2, Upload } from "lucide-react";
 import { db } from "@/lib/orbit/db";
+import { parsePostmanCollection } from "@/lib/orbit/postman";
 import type { SavedRequest, Environment } from "@/lib/orbit/types";
 
 interface Props {
@@ -17,6 +18,8 @@ export default function Sidebar({ onLoadRequest, activeEnvId, onEnvChange, onOpe
   const [openCols, setOpenCols] = useState<Set<string>>(new Set());
   const [newColName, setNewColName] = useState("");
   const [addingCol, setAddingCol] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const importRef = useRef<HTMLInputElement>(null);
 
   const collections = useLiveQuery(() => db.collections.orderBy("createdAt").toArray(), []);
   const environments = useLiveQuery(() => db.environments.orderBy("createdAt").toArray(), []);
@@ -38,6 +41,24 @@ export default function Sidebar({ onLoadRequest, activeEnvId, onEnvChange, onOpe
 
   const deleteRequest = (id: string) => db.requests.delete(id);
 
+  const handlePostmanImport = async (files: FileList | null) => {
+    if (!files?.[0]) return;
+    setImporting(true);
+    try {
+      const text = await files[0].text();
+      const { collectionName, requests } = parsePostmanCollection(text);
+      const colId = crypto.randomUUID();
+      await db.collections.add({ id: colId, name: collectionName, createdAt: Date.now() });
+      await db.requests.bulkAdd(requests.map((r) => ({ ...r, id: crypto.randomUUID(), collectionId: colId })));
+      setOpenCols((s) => { const n = new Set(s); n.add(colId); return n; });
+    } catch (e) {
+      console.error("Postman import failed", e);
+    } finally {
+      setImporting(false);
+      if (importRef.current) importRef.current.value = "";
+    }
+  };
+
   const sectionTitle = "text-[10px] font-semibold tracking-widest uppercase mb-2 px-1";
 
   return (
@@ -46,10 +67,21 @@ export default function Sidebar({ onLoadRequest, activeEnvId, onEnvChange, onOpe
       <div className="flex-1 overflow-y-auto p-3">
         <div className="flex items-center justify-between mb-2">
           <span className={sectionTitle} style={{ color: "var(--muted)" }}>Collections</span>
-          <button onClick={() => setAddingCol(true)} className="transition hover:opacity-80" style={{ color: "var(--nebula)" }}>
-            <Plus size={14} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => importRef.current?.click()}
+              className="transition hover:opacity-80"
+              style={{ color: "var(--muted)" }}
+              title={importing ? "Import en cours…" : "Importer une collection Postman"}
+            >
+              <Upload size={13} />
+            </button>
+            <button onClick={() => setAddingCol(true)} className="transition hover:opacity-80" style={{ color: "var(--nebula)" }}>
+              <Plus size={14} />
+            </button>
+          </div>
         </div>
+        <input ref={importRef} type="file" accept=".json" className="hidden" onChange={(e) => handlePostmanImport(e.target.files)} />
 
         {addingCol && (
           <form onSubmit={(e) => { e.preventDefault(); createCollection(); }} className="mb-2 flex gap-1">
