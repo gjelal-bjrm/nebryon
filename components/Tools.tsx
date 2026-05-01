@@ -987,6 +987,10 @@ declare global { interface Window { PDFLib?: any; } }
 export default function Tools() {
   const reduce = useReducedMotion();
   const [active, setActive] = useState<ToolId | null>(null);
+  const [category, setCategory] = useState<string | null>(null);
+
+  const categories = [...new Set(TOOLS.map((t) => t.badge))];
+  const visibleTools = TOOLS.length > 9 && category ? TOOLS.filter((t) => t.badge === category) : TOOLS;
 
   const workspaces: Record<ToolId, React.ReactNode> = {
     resize: <ResizeTool />, merge: <MergeTool />, extract: <ExtractTool />,
@@ -1002,8 +1006,32 @@ export default function Tools() {
         <p className="text-sm" style={{ color:"var(--muted)" }}>100 % local — aucune donnée transmise</p>
       </div>
 
+      {TOOLS.length > 9 && (
+        <div className="flex flex-wrap gap-2 mb-6">
+          <button
+            onClick={() => { setCategory(null); setActive(null); }}
+            className="rounded-full px-3 py-1.5 text-xs transition-all"
+            style={!category
+              ? { border: "1px solid var(--nebula)", background: "rgba(108,99,255,.12)", color: "var(--halo)" }
+              : { border: "1px solid var(--stroke)", color: "var(--muted)" }}>
+            Tous
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => { setCategory(cat); setActive(null); }}
+              className="rounded-full px-3 py-1.5 text-xs transition-all"
+              style={category === cat
+                ? { border: "1px solid var(--nebula)", background: "rgba(108,99,255,.12)", color: "var(--halo)" }
+                : { border: "1px solid var(--stroke)", color: "var(--muted)" }}>
+              {cat}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {TOOLS.map((t, i) => (
+        {visibleTools.map((t, i) => (
           <motion.button
             key={t.id}
             onClick={() => setActive(active === t.id ? null : t.id)}
