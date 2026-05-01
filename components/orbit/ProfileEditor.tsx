@@ -6,8 +6,9 @@ import { X, Camera, Download, Upload, AlertTriangle, FolderOpen, Check, RefreshC
 import { db, exportBackup, importBackup, getBackupDirHandle, setBackupDirHandle } from "@/lib/orbit/db";
 import { defaultProfile } from "@/lib/orbit/types";
 import {
-  getInterval, setInterval_, getLastBackup, isDue, writeBackupToDir,
-  INTERVAL_LABELS,
+  getInterval, setInterval_, getLastBackup, writeBackup,
+  pickAndStoreDir, clearStoredDir, getStoredDirLabel,
+  INTERVAL_LABELS, isElectron,
 } from "@/lib/orbit/autobackup";
 import type { Profile } from "@/lib/orbit/types";
 import type { BackupInterval } from "@/lib/orbit/autobackup";
@@ -45,8 +46,7 @@ export default function ProfileEditor({ onClose }: Props) {
   };
 
   /* ── Backup state ────────────────────────────────────────── */
-  const [dirHandle,    setDirHandle]    = useState<FileSystemDirectoryHandle | null>(null);
-  const [dirName,      setDirName]      = useState<string>("");
+  const [dirLabel,     setDirLabel]     = useState<string>("");
   const [interval,     setIntervalState] = useState<BackupInterval>("daily");
   const [lastBackup,   setLastBackup]   = useState<number>(0);
   const [backupStatus, setBackupStatus] = useState("");
@@ -55,29 +55,23 @@ export default function ProfileEditor({ onClose }: Props) {
 
   // Load saved state on mount
   useEffect(() => {
-    getBackupDirHandle().then((h) => {
-      if (h) { setDirHandle(h); setDirName(h.name); }
-    });
+    getStoredDirLabel().then((label) => { if (label) setDirLabel(label); });
     setIntervalState(getInterval());
     setLastBackup(getLastBackup());
   }, []);
 
   const handlePickDir = async () => {
     try {
-      // @ts-ignore — File System Access API
-      const handle: FileSystemDirectoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
-      await setBackupDirHandle(handle);
-      setDirHandle(handle);
-      setDirName(handle.name);
-      setBackupStatus("✓ Dossier configuré : " + handle.name);
-    } catch (e: any) {
-      if (e?.name !== "AbortError") setBackupStatus("⚠ Impossible d'accéder au dossier");
+      const label = await pickAndStoreDir();
+      if (label) { setDirLabel(label); setBackupStatus("✓ Dossier configuré : " + label); }
+    } catch {
+      setBackupStatus("⚠ Impossible d'accéder au dossier");
     }
   };
 
   const handleClearDir = async () => {
-    await setBackupDirHandle(null);
-    setDirHandle(null); setDirName("");
+    await clearStoredDir();
+    setDirLabel("");
     setBackupStatus("Dossier de backup supprimé.");
   };
 
@@ -87,14 +81,13 @@ export default function ProfileEditor({ onClose }: Props) {
   };
 
   const handleManualBackupToDir = async () => {
-    if (!dirHandle) return;
     setBackupStatus("Backup en cours…");
     try {
-      const name = await writeBackupToDir(dirHandle);
+      const name = await writeBackup();
       setLastBackup(Date.now());
       setBackupStatus(`✓ Sauvegardé : ${name}`);
-    } catch {
-      setBackupStatus("⚠ Erreur lors de l'écriture dans le dossier");
+    } catch (e: any) {
+      setBackupStatus("⚠ " + (e?.message ?? "Erreur lors du backup"));
     }
   };
 
@@ -125,7 +118,9 @@ export default function ProfileEditor({ onClose }: Props) {
     ? new Date(ts).toLocaleString("fr", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
     : "Jamais";
 
-  const fsaSupported = typeof window !== "undefined" && "showDirectoryPicker" in window;
+  const dirPickerSupported =
+    typeof window !== "undefined" &&
+    (isElectron() || "showDirectoryPicker" in window);
 
   /* ── Styles ──────────────────────────────────────────────── */
   const inputCls = "w-full rounded-lg px-3 py-2 text-sm focus:outline-none transition";
@@ -223,13 +218,15 @@ export default function ProfileEditor({ onClose }: Props) {
               <div>
                 <p className="text-sm font-semibold mb-0.5" style={{ color: "var(--text)" }}>Backup automatique sur disque</p>
                 <p className="text-xs" style={{ color: "var(--muted)" }}>
-                  {fsaSupported
-                    ? "Choisis un dossier local. Orbit y écrira un fichier JSON horodaté selon l'intervalle choisi."
+                  {dirPickerSupported
+                    ? isElectron()
+                      ? "Sélectionne un dossier via le dialogue natif. Orbit y écrira automatiquement les backups, et à chaque fermeture de l'app."
+                      : "Choisis un dossier local. Orbit y écrira un fichier JSON horodaté selon l'intervalle choisi."
                     : "⚠ Ton navigateur ne supporte pas la File System Access API (Chrome/Edge requis)."}
                 </p>
               </div>
 
-              {fsaSupported && (
+              {dirPickerSupported && (
                 <>
                   {/* Dossier sélectionné */}
                   <div className="flex items-center gap-2">
@@ -237,9 +234,9 @@ export default function ProfileEditor({ onClose }: Props) {
                       className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition hover:opacity-85"
                       style={{ border: "1px solid var(--stroke)", color: "var(--muted)" }}>
                       <FolderOpen size={13} />
-                      {dirName ? `📁 ${dirName}` : "Choisir un dossier…"}
+                      {dirLabel ? `📁 ${dirLabel}` : "Choisir un dossier…"}
                     </button>
-                    {dirName && (
+                    {dirLabel && (
                       <button onClick={handleClearDir} className="text-xs transition hover:opacity-70" style={{ color: "var(--muted)" }}>
                         <X size={12} />
                       </button>
@@ -263,7 +260,7 @@ export default function ProfileEditor({ onClose }: Props) {
                   </div>
 
                   {/* Backup maintenant */}
-                  {dirHandle && interval !== "off" && (
+                  {dirLabel && interval !== "off" && (
                     <button onClick={handleManualBackupToDir}
                       className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition hover:opacity-85 w-fit"
                       style={{ background: "linear-gradient(135deg,var(--nebula),var(--indigo))", color: "#fff" }}>

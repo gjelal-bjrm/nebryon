@@ -1,5 +1,10 @@
-import { exportBackup, getBackupDirHandle } from "./db";
+import { exportBackup, getBackupDirHandle, setBackupDirHandle, db } from "./db";
 
+/* ── Context detection ───────────────────────────────────── */
+export const isElectron = () =>
+  typeof window !== "undefined" && typeof window.electronAPI !== "undefined";
+
+/* ── Interval config ─────────────────────────────────────── */
 export type BackupInterval = "15min" | "hourly" | "daily" | "weekly" | "off";
 
 export const INTERVAL_LABELS: Record<BackupInterval, string> = {
@@ -36,29 +41,88 @@ export function isDue(): boolean {
   return Date.now() - getLastBackup() > INTERVAL_MS[interval];
 }
 
-/** Write a timestamped backup JSON to the configured directory */
-export async function writeBackupToDir(handle: FileSystemDirectoryHandle): Promise<string> {
+/* ── Stored directory ────────────────────────────────────── */
+
+/** Returns the display name/path of the configured backup dir, or null */
+export async function getStoredDirLabel(): Promise<string | null> {
+  if (isElectron()) {
+    const row = await db.settings.get("backupDirPath");
+    return (row?.value as string) ?? null;
+  }
+  const handle = await getBackupDirHandle();
+  return handle?.name ?? null;
+}
+
+/** Open native picker and persist the selection */
+export async function pickAndStoreDir(): Promise<string | null> {
+  if (isElectron()) {
+    const dirPath = await window.electronAPI!.pickDir();
+    if (!dirPath) return null;
+    await db.settings.put({ id: "backupDirPath", value: dirPath });
+    return dirPath;
+  }
+  // Web — File System Access API
+  try {
+    // @ts-ignore
+    const handle: FileSystemDirectoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    await setBackupDirHandle(handle);
+    return handle.name;
+  } catch (e: any) {
+    if (e?.name === "AbortError") return null;
+    throw e;
+  }
+}
+
+/** Remove stored dir config */
+export async function clearStoredDir(): Promise<void> {
+  if (isElectron()) {
+    await db.settings.delete("backupDirPath");
+  } else {
+    await setBackupDirHandle(null);
+  }
+}
+
+/* ── Write backup ────────────────────────────────────────── */
+
+function backupFilename(): string {
+  return `orbit-backup-${new Date().toISOString().replace(/:/g, "-").slice(0, 19)}.json`;
+}
+
+/** Write a backup to the configured directory — returns filename */
+export async function writeBackup(): Promise<string> {
   const json = await exportBackup();
-  const ts   = new Date().toISOString().replace(/:/g, "-").slice(0, 19);
-  const name = `orbit-backup-${ts}.json`;
-  const file = await handle.getFileHandle(name, { create: true });
-  const writable = await file.createWritable();
-  await writable.write(json);
-  await writable.close();
+  const name = backupFilename();
+
+  if (isElectron()) {
+    const row = await db.settings.get("backupDirPath");
+    const dirPath = row?.value as string | undefined;
+    if (!dirPath) throw new Error("Aucun dossier de backup configuré");
+    await window.electronAPI!.writeFile(dirPath, name, json);
+  } else {
+    const handle = await getBackupDirHandle();
+    if (!handle) throw new Error("Aucun dossier de backup configuré");
+    // Re-verify permission (Chrome may revoke between sessions)
+    try {
+      // @ts-ignore
+      const perm = await (handle as any).queryPermission({ mode: "readwrite" });
+      if (perm !== "granted") throw new Error("Permission révoquée");
+    } catch { /* queryPermission not available — attempt anyway */ }
+    const file = await handle.getFileHandle(name, { create: true });
+    const writable = await file.createWritable();
+    await writable.write(json);
+    await writable.close();
+  }
+
   localStorage.setItem(LS_LAST, Date.now().toString());
   return name;
 }
 
-/** Run backup if due — silently skips if no handle or not due */
+/** Run backup only if due and a dir is configured */
 export async function runAutoBackupIfDue(): Promise<string | null> {
   if (!isDue()) return null;
-  const handle = await getBackupDirHandle();
-  if (!handle) return null;
-  // Verify we still have permission
   try {
-    // @ts-ignore — queryPermission is available in Chrome (WICG FSA spec)
-    const perm = await (handle as any).queryPermission({ mode: "readwrite" });
-    if (perm !== "granted") return null;
-  } catch { return null; }
-  return writeBackupToDir(handle);
+    return await writeBackup();
+  } catch {
+    return null; // Silent fail — don't interrupt user
+  }
 }
