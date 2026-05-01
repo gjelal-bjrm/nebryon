@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useAutoBackup } from "@/hooks/useAutoBackup";
 import { useLiveQuery } from "dexie-react-hooks";
 import dynamic from "next/dynamic";
 import RequestPanel from "@/components/orbit/RequestPanel";
@@ -21,6 +22,8 @@ export default function OrbitPage() {
   const [response, setResponse] = useState<OrbitResponse | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useAutoBackup();
 
   const [activeEnvId, setActiveEnvId] = useState<string | null>(null);
   const [showEnvEditor,    setShowEnvEditor]    = useState(false);

@@ -46,11 +46,17 @@ export default function Sidebar({ onLoadRequest, activeEnvId, onEnvChange, onOpe
     setImporting(true);
     try {
       const text = await files[0].text();
-      const { collectionName, requests } = parsePostmanCollection(text);
-      const colId = crypto.randomUUID();
-      await db.collections.add({ id: colId, name: collectionName, createdAt: Date.now() });
-      await db.requests.bulkAdd(requests.map((r) => ({ ...r, id: crypto.randomUUID(), collectionId: colId })));
-      setOpenCols((s) => { const n = new Set(s); n.add(colId); return n; });
+      const groups = parsePostmanCollection(text);
+      const now = Date.now();
+      const newIds: string[] = [];
+      for (let i = 0; i < groups.length; i++) {
+        const { collectionName, requests } = groups[i];
+        const colId = crypto.randomUUID();
+        await db.collections.add({ id: colId, name: collectionName, createdAt: now + i });
+        await db.requests.bulkAdd(requests.map((r) => ({ ...r, id: crypto.randomUUID(), collectionId: colId })));
+        newIds.push(colId);
+      }
+      setOpenCols((s) => { const n = new Set(s); newIds.forEach((id) => n.add(id)); return n; });
     } catch (e) {
       console.error("Postman import failed", e);
     } finally {
