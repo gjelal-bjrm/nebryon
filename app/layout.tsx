@@ -1,7 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { Syne } from "next/font/google";
-import Navbar from "@/components/Navbar";
+import ConditionalNavbar from "@/components/ConditionalNavbar";
 
 const syne = Syne({
   subsets: ["latin"],
@@ -19,7 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr" className={syne.variable}>
       <body className={`${syne.className} min-h-screen antialiased`}>
-        <Navbar />
+        <ConditionalNavbar />
         {children}
       </body>
     </html>
