@@ -141,7 +141,19 @@ export default function OrbitPage() {
     window.electronAPI!.onBeforeQuit(handler);
   }, []);
 
-  const [activeEnvId,    setActiveEnvId]    = useState<string | null>(null);
+  const [activeEnvId, setActiveEnvId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem("orbit-active-env") || null;
+  });
+
+  // Persist selected environment across reloads
+  useEffect(() => {
+    try {
+      if (activeEnvId) localStorage.setItem("orbit-active-env", activeEnvId);
+      else             localStorage.removeItem("orbit-active-env");
+    } catch { /* private mode */ }
+  }, [activeEnvId]);
+
   const [showEnvEditor,  setShowEnvEditor]  = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showProfile,    setShowProfile]    = useState(false);
