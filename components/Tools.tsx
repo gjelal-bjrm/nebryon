@@ -1833,8 +1833,17 @@ function CVTool() {
 export default function Tools() {
   const reduce = useReducedMotion();
   const [active, setActive] = useState<ToolId | null>(null);
-  const [category, setCategory] = useState<string | null>(null);
+  const [category, setCategory] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem("nebryon-tools-category") || null;
+  });
   const [expanded, setExpanded] = useState(false);
+
+  // Persist selected category
+  useEffect(() => {
+    if (category) localStorage.setItem("nebryon-tools-category", category);
+    else localStorage.removeItem("nebryon-tools-category");
+  }, [category]);
 
   const categories = [...new Set(TOOLS.map((t) => t.badge))];
   const filteredTools = TOOLS.length > 9 && category ? TOOLS.filter((t) => t.badge === category) : TOOLS;
