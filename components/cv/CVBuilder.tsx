@@ -232,8 +232,10 @@ function PreviewPane({ data, triggerKey }: { data: CVData; triggerKey: number })
           </div>
         );
         return (
-          <iframe src={url ?? ""} className="w-full h-full"
-            style={{ border: "none", background: "#fff" }} title="Aperçu CV" />
+          {url && (
+            <iframe src={url} className="w-full h-full"
+              style={{ border: "none", background: "#fff" }} title="Aperçu CV" />
+          )}
         );
       }}
     </BlobProvider>

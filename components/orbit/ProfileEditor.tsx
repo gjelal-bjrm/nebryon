@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { X, Camera, Download, Upload, AlertTriangle, FolderOpen, Check, RefreshCw } from "lucide-react";
+import { X, Camera, Download, Upload, AlertTriangle, FolderOpen, Check, RefreshCw, Trash2 } from "lucide-react";
 import { db, exportBackup, importBackup, getBackupDirHandle, setBackupDirHandle } from "@/lib/orbit/db";
 import { defaultProfile } from "@/lib/orbit/types";
 import {
@@ -16,7 +16,7 @@ import type { BackupInterval } from "@/lib/orbit/autobackup";
 interface Props { onClose: () => void; }
 
 export default function ProfileEditor({ onClose }: Props) {
-  const [tab, setTab] = useState<"profile" | "backup">("profile");
+  const [tab, setTab] = useState<"profile" | "backup" | "reset">("profile");
 
   /* ── Profile state ───────────────────────────────────────── */
   const [saving, setSaving] = useState(false);
@@ -114,6 +114,44 @@ export default function ProfileEditor({ onClose }: Props) {
     } catch { setBackupStatus("⚠ Fichier invalide ou corrompu"); }
   };
 
+  /* ── Reset state ─────────────────────────────────────────── */
+  const [resetStep,    setResetStep]    = useState<0 | 1 | 2>(0); // 0=idle, 1=warn, 2=confirm
+  const [resetInput,   setResetInput]   = useState("");
+  const [exported,     setExported]     = useState(false);
+  const RESET_WORD = "SUPPRIMER";
+
+  const handleExportForReset = async () => {
+    try {
+      const json = await exportBackup();
+      const blob = new Blob([json], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `nebryon-backup-avant-reset-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      setExported(true);
+    } catch { /* ignore */ }
+  };
+
+  const handleReset = async () => {
+    if (resetInput !== RESET_WORD) return;
+    // Clear Dexie tables
+    await Promise.all([
+      db.profile.clear(),
+      db.collections?.clear?.(),
+      db.folders?.clear?.(),
+      db.requests?.clear?.(),
+      db.environments?.clear?.(),
+    ].filter(Boolean));
+    // Clear all nebryon-* and orbit-* localStorage/sessionStorage keys
+    [...Object.keys(localStorage)].forEach((k) => {
+      if (k.startsWith("nebryon") || k.startsWith("orbit")) localStorage.removeItem(k);
+    });
+    [...Object.keys(sessionStorage)].forEach((k) => {
+      if (k.startsWith("nebryon") || k.startsWith("orbit")) sessionStorage.removeItem(k);
+    });
+    window.location.reload();
+  };
+
   const fmtDate = (ts: number) => ts
     ? new Date(ts).toLocaleString("fr", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
     : "Jamais";
@@ -138,11 +176,18 @@ export default function ProfileEditor({ onClose }: Props) {
         <div className="flex items-center justify-between px-5 py-4 flex-shrink-0"
           style={{ borderBottom: "1px solid var(--stroke)" }}>
           <div className="flex gap-3">
-            {(["profile", "backup"] as const).map((t) => (
-              <button key={t} onClick={() => setTab(t)}
+            {([
+              ["profile", "Profil"],
+              ["backup",  "Sauvegarde"],
+              ["reset",   "Réinitialiser"],
+            ] as const).map(([t, label]) => (
+              <button key={t} onClick={() => { setTab(t); setResetStep(0); setResetInput(""); setExported(false); }}
                 className="text-sm font-semibold pb-0.5 transition"
-                style={{ color: tab === t ? "var(--nebula)" : "var(--muted)", borderBottom: tab === t ? "2px solid var(--nebula)" : "2px solid transparent" }}>
-                {t === "profile" ? "Profil" : "Sauvegarde"}
+                style={{
+                  color: tab === t ? (t === "reset" ? "#CF2328" : "var(--nebula)") : "var(--muted)",
+                  borderBottom: tab === t ? `2px solid ${t === "reset" ? "#CF2328" : "var(--nebula)"}` : "2px solid transparent",
+                }}>
+                {label}
               </button>
             ))}
           </div>
@@ -334,6 +379,121 @@ export default function ProfileEditor({ onClose }: Props) {
                 {backupStatus}
               </p>
             )}
+          </div>
+        )}
+
+        {/* ── Reset tab ── */}
+        {tab === "reset" && (
+          <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
+
+            {/* What will be deleted */}
+            <div className="rounded-xl p-4 flex flex-col gap-2" style={{ border: "1px solid rgba(207,35,40,.4)", background: "rgba(207,35,40,.05)" }}>
+              <div className="flex items-center gap-2 mb-1">
+                <AlertTriangle size={14} style={{ color: "#CF2328" }} />
+                <p className="text-sm font-semibold" style={{ color: "#CF2328" }}>Zone de danger</p>
+              </div>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>La réinitialisation effacera <strong style={{ color: "var(--text)" }}>définitivement</strong> :</p>
+              <ul className="text-xs space-y-1 pl-1" style={{ color: "var(--muted)" }}>
+                {[
+                  "Toutes tes collections, requêtes et environnements Orbit",
+                  "Ton profil (nom, email, photo, préférences)",
+                  "Tes données de CV, clés Base64 et réglages des outils",
+                  "L'historique de sauvegarde et les réglages de backup automatique",
+                ].map((item) => (
+                  <li key={item} className="flex items-start gap-1.5">
+                    <span style={{ color: "#CF2328", flexShrink: 0 }}>·</span> {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Step 0 — idle */}
+            {resetStep === 0 && (
+              <div className="flex flex-col gap-3">
+                <p className="text-xs" style={{ color: "var(--muted)" }}>
+                  Il est fortement recommandé d'exporter tes données avant de continuer.
+                </p>
+                <button onClick={handleExportForReset}
+                  className="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium transition hover:opacity-85 w-fit"
+                  style={{ border: "1px solid var(--stroke)", color: exported ? "var(--nebula)" : "var(--muted)" }}>
+                  <Download size={13} />
+                  {exported ? "✓ Données exportées" : "Exporter mes données d'abord"}
+                </button>
+                <button onClick={() => setResetStep(1)}
+                  className="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition hover:opacity-85 w-fit"
+                  style={{ border: "1px solid rgba(207,35,40,.5)", background: "rgba(207,35,40,.08)", color: "#CF2328" }}>
+                  <Trash2 size={13} /> Réinitialiser l'application…
+                </button>
+              </div>
+            )}
+
+            {/* Step 1 — warning + export reminder */}
+            {resetStep === 1 && (
+              <div className="rounded-xl p-4 flex flex-col gap-4" style={{ border: "1px solid rgba(207,35,40,.5)", background: "rgba(207,35,40,.06)" }}>
+                <p className="text-sm font-semibold" style={{ color: "#CF2328" }}>Tu es sûr(e) ?</p>
+                <p className="text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
+                  Toutes tes données seront effacées et l'application sera rechargée. Cette action est <strong style={{ color: "var(--text)" }}>irréversible</strong>.
+                </p>
+
+                {!exported && (
+                  <button onClick={handleExportForReset}
+                    className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition hover:opacity-85 w-fit"
+                    style={{ border: "1px solid var(--stroke)", color: "var(--muted)" }}>
+                    <Download size={12} /> Exporter mes données avant de supprimer
+                  </button>
+                )}
+                {exported && (
+                  <p className="text-xs" style={{ color: "var(--nebula)" }}>✓ Données exportées — tu peux continuer.</p>
+                )}
+
+                <div className="flex gap-2">
+                  <button onClick={() => setResetStep(2)}
+                    className="rounded-lg px-4 py-1.5 text-xs font-semibold transition hover:opacity-85"
+                    style={{ background: "#CF2328", color: "#fff" }}>
+                    Je comprends, continuer
+                  </button>
+                  <button onClick={() => { setResetStep(0); setExported(false); }}
+                    className="rounded-lg px-4 py-1.5 text-xs transition hover:opacity-80"
+                    style={{ border: "1px solid var(--stroke)", color: "var(--muted)" }}>
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2 — typed confirmation */}
+            {resetStep === 2 && (
+              <div className="rounded-xl p-4 flex flex-col gap-4" style={{ border: "1px solid rgba(207,35,40,.6)", background: "rgba(207,35,40,.08)" }}>
+                <p className="text-sm font-semibold" style={{ color: "#CF2328" }}>Confirmation finale</p>
+                <p className="text-xs" style={{ color: "var(--muted)" }}>
+                  Pour confirmer, tape <strong style={{ color: "var(--text)", letterSpacing: "0.05em" }}>SUPPRIMER</strong> dans le champ ci-dessous :
+                </p>
+                <input
+                  value={resetInput}
+                  onChange={(e) => setResetInput(e.target.value)}
+                  placeholder="SUPPRIMER"
+                  autoFocus
+                  className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none tracking-widest font-mono"
+                  style={{ border: `1px solid ${resetInput === RESET_WORD ? "#CF2328" : "var(--stroke)"}`, background: "rgba(207,35,40,.08)", color: "#CF2328" }}
+                  onKeyDown={(e) => e.key === "Enter" && resetInput === RESET_WORD && handleReset()}
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleReset}
+                    disabled={resetInput !== RESET_WORD}
+                    className="flex items-center gap-2 rounded-lg px-4 py-1.5 text-xs font-semibold transition hover:opacity-85 disabled:opacity-30 disabled:cursor-not-allowed"
+                    style={{ background: "#CF2328", color: "#fff" }}>
+                    <Trash2 size={12} /> Supprimer toutes les données
+                  </button>
+                  <button onClick={() => { setResetStep(0); setResetInput(""); setExported(false); }}
+                    className="rounded-lg px-4 py-1.5 text-xs transition hover:opacity-80"
+                    style={{ border: "1px solid var(--stroke)", color: "var(--muted)" }}>
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            )}
+
           </div>
         )}
       </div>
