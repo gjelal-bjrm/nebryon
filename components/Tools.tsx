@@ -31,7 +31,7 @@ import {
   MapPin,
   GitCompare,
   FileText,
-  FileUser,
+  ScrollText,
 } from "lucide-react";
 
 const CVBuilder = dynamic(() => import("./cv/CVBuilder"), { ssr: false });
@@ -63,7 +63,7 @@ const TOOLS: Tool[] = [
   { id: "clock",    icon: <Clock size={18} />,          title: "Horloge",                    desc: "Affichage de l'heure en grand, personnalisable — idéal pour les examens ou réunions.", badge: "Quotidien" },
   { id: "diff",     icon: <GitCompare size={18} />,    title: "Comparateur de texte",       desc: "Compare deux blocs de texte et affiche les différences ligne par ligne ou mot par mot.", badge: "Dev" },
   { id: "lorem",    icon: <FileText size={18} />,      title: "Lorem Ipsum",                desc: "Génère du texte de remplissage par paragraphes, phrases ou mots.",                     badge: "Dev" },
-  { id: "cv",       icon: <FileUser size={18} />,     title: "Générateur de CV",           desc: "Crée un CV professionnel et téléchargeable en PDF. Templates, couleurs, mode ATS.",       badge: "Pro" },
+  { id: "cv",       icon: <ScrollText size={18} />,   title: "Générateur de CV",           desc: "Crée un CV professionnel et téléchargeable en PDF. Templates, couleurs, mode ATS.",       badge: "Pro" },
 ];
 
 /* ── Helpers ────────────────────────────────────────────── */
