@@ -2,16 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Sun, Moon } from "lucide-react";
+import { Sun, Moon, User } from "lucide-react";
+import { useLiveQuery } from "dexie-react-hooks";
+import dynamic from "next/dynamic";
+import { db } from "@/lib/orbit/db";
+import { NAV } from "@/lib/shared/nav";
+import type { NavItem } from "@/lib/shared/nav";
 
-type NavItem = { label: string; href: string };
-
-const NAV: NavItem[] = [
-  { label: "Outils",  href: "#tools" },
-  { label: "Projets", href: "#projects" },
-  { label: "Orbit",   href: "/orbit" },
-  //{ label: "Contact", href: "#contact" },
-];
+const ProfileEditor = dynamic(() => import("@/components/orbit/ProfileEditor"), { ssr: false });
 
 function NebryonLogo({ size = 32 }: { size?: number }) {
   const inner = Math.round(size * 0.19);
@@ -41,9 +39,13 @@ function NebryonLogo({ size = 32 }: { size?: number }) {
 
 export default function Navbar() {
   const reduce = useReducedMotion();
-  const [open, setOpen]     = useState(false);
-  const [active, setActive] = useState<string>("#tools");
-  const [theme, setTheme]   = useState<"dark" | "light">("dark");
+  const [open, setOpen]         = useState(false);
+  const [active, setActive]     = useState<string>("#tools");
+  const [theme, setTheme]       = useState<"dark" | "light">("dark");
+  const [showProfile, setShowProfile] = useState(false);
+
+  const profile = useLiveQuery(() => db.profile.get("singleton"), []);
+  const initial = profile?.firstName?.[0] ?? profile?.email?.[0] ?? null;
 
   // Init theme from localStorage
   useEffect(() => {
@@ -164,6 +166,28 @@ export default function Navbar() {
                 )}
               </AnimatePresence>
             </motion.button>
+
+            {/* Profile button */}
+            <motion.button
+              onClick={() => setShowProfile(true)}
+              className="flex items-center justify-center rounded-full overflow-hidden transition-all"
+              style={{
+                width: 36, height: 36,
+                border: "1px solid var(--stroke)",
+                background: profile?.photo ? "transparent" : "rgba(108,99,255,.12)",
+              }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              title="Profil & Sauvegarde"
+            >
+              {profile?.photo ? (
+                <img src={profile.photo} alt="avatar" className="w-full h-full object-cover" />
+              ) : initial ? (
+                <span className="text-[11px] font-bold" style={{ color: "var(--nebula)" }}>{initial.toUpperCase()}</span>
+              ) : (
+                <User size={15} style={{ color: "var(--muted)" }} />
+              )}
+            </motion.button>
           </nav>
 
           {/* Mobile right side */}
@@ -174,6 +198,21 @@ export default function Navbar() {
               style={{ width: 36, height: 36, border: "1px solid var(--stroke)", background: "var(--card-bg)", color: "var(--muted)" }}
               whileTap={{ scale: 0.95 }}>
               {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+            </motion.button>
+
+            <motion.button
+              onClick={() => setShowProfile(true)}
+              className="flex items-center justify-center rounded-full overflow-hidden transition-all"
+              style={{ width: 36, height: 36, border: "1px solid var(--stroke)", background: profile?.photo ? "transparent" : "rgba(108,99,255,.12)" }}
+              whileTap={{ scale: 0.95 }}
+              title="Profil">
+              {profile?.photo ? (
+                <img src={profile.photo} alt="avatar" className="w-full h-full object-cover" />
+              ) : initial ? (
+                <span className="text-[11px] font-bold" style={{ color: "var(--nebula)" }}>{initial.toUpperCase()}</span>
+              ) : (
+                <User size={15} style={{ color: "var(--muted)" }} />
+              )}
             </motion.button>
 
             <button
@@ -228,6 +267,8 @@ export default function Navbar() {
           )}
         </AnimatePresence>
       </div>
+
+      {showProfile && <ProfileEditor onClose={() => setShowProfile(false)} />}
     </header>
   );
 }

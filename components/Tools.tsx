@@ -19,6 +19,11 @@ import {
   X,
   ChevronRight,
   ChevronDown,
+  Plus,
+  Trash2,
+  Copy,
+  Check,
+  Key,
 } from "lucide-react";
 
 /* ── Types ─────────────────────────────────────────────── */
@@ -42,7 +47,7 @@ const TOOLS: Tool[] = [
   //{ id: "tva",      icon: <Receipt size={18} />,        title: "Calculateur TVA",            desc: "Calcule HT ↔ TTC selon le taux de ton pays (CH, FR, BE…).",                          badge: "Finance" },
   { id: "date",     icon: <CalendarDays size={18} />,   title: "Calculateur de dates",       desc: "Différence entre dates, ajouter des jours, calculer l'âge.",                         badge: "Quotidien" },
   //{ id: "units",    icon: <Ruler size={18} />,          title: "Convertisseur d'unités",     desc: "Longueur, masse, température, surface — km/miles, kg/lbs, °C/°F…",                   badge: "Quotidien" },
-  { id: "base64",   icon: <Code2 size={18} />,          title: "Image → Base64",             desc: "Encode une image en Base64 pour HTML / CSS / JSON.",                                  badge: "Dev" },
+  { id: "base64",   icon: <Code2 size={18} />,          title: "Base64",                     desc: "Encode images et textes en Base64. Gestion de clés nommées avec préfixe/suffixe.",  badge: "Dev" },
   { id: "meta",     icon: <ScanSearch size={18} />,     title: "Inspecteur de fichier",      desc: "Dimensions, taille, format, ratio d'une image ou d'un PDF.",                         badge: "Dev" },
 ];
 
@@ -931,23 +936,311 @@ function UnitsTool() {
 }
 
 /* ── BASE64 ─────────────────────────────────────────────── */
-function Base64Tool() {
-  const [data,setData]=useState(""); const [copied,setCopied]=useState("");
-  const copy=(mode:"raw"|"img"|"css")=>{
-    const text=mode==="img"?`<img src="${data}" alt="">`:mode==="css"?`background-image: url("${data}");`:data;
-    navigator.clipboard.writeText(text).then(()=>{setCopied(mode);setTimeout(()=>setCopied(""),2000);});
+
+const B64_KEYS_LS = "nebryon-b64-keys";
+
+interface B64Key { id: string; name: string; value: string; }
+
+/** UTF-8-safe btoa */
+const toB64 = (s: string) => btoa(unescape(encodeURIComponent(s)));
+/** UTF-8-safe atob */
+const fromB64 = (s: string) => {
+  try { return decodeURIComponent(escape(atob(s.trim()))); }
+  catch { return null; }
+};
+
+function useSavedKeys(): [B64Key[], (keys: B64Key[]) => void] {
+  const [keys, setKeys] = useState<B64Key[]>(() => {
+    try {
+      const raw = localStorage.getItem(B64_KEYS_LS);
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
+  const save = useCallback((next: B64Key[]) => {
+    setKeys(next);
+    try { localStorage.setItem(B64_KEYS_LS, JSON.stringify(next)); } catch { /* */ }
+  }, []);
+  return [keys, save];
+}
+
+function CopyBtn({ text, label = "Copier" }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  const handle = () => {
+    navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); });
   };
   return (
+    <button onClick={handle}
+      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition hover:opacity-80"
+      style={copied
+        ? { border: "1px solid var(--nebula)", background: "rgba(108,99,255,.12)", color: "var(--halo)" }
+        : { border: "1px solid var(--stroke)", color: "var(--muted)" }}>
+      {copied ? <Check size={12} /> : <Copy size={12} />}
+      {copied ? "Copié !" : label}
+    </button>
+  );
+}
+
+function Base64Tool() {
+  const [tab, setTab] = useState<"image" | "text" | "keys">("image");
+
+  /* ── Image tab ── */
+  const [imgData, setImgData] = useState("");
+  const [imgCopied, setImgCopied] = useState("");
+  const copyImg = (mode: "raw" | "img" | "css") => {
+    const text = mode === "img"
+      ? `<img src="${imgData}" alt="">`
+      : mode === "css"
+      ? `background-image: url("${imgData}");`
+      : imgData;
+    navigator.clipboard.writeText(text).then(() => { setImgCopied(mode); setTimeout(() => setImgCopied(""), 2000); });
+  };
+
+  /* ── Text tab ── */
+  const [textMode, setTextMode]   = useState<"encode" | "decode">("encode");
+  const [textInput, setTextInput] = useState("");
+  const [selectedKey, setSelectedKey] = useState<string>("");   // key id or ""
+  const [keyPos, setKeyPos]       = useState<"prefix" | "suffix">("prefix");
+  const [keys, saveKeys]          = useSavedKeys();
+
+  const encodeOutput = (() => {
+    if (!textInput.trim()) return "";
+    const base = toB64(textInput);
+    const kObj = keys.find((k) => k.id === selectedKey);
+    if (!kObj) return base;
+    const kEnc = toB64(kObj.value);
+    return keyPos === "prefix" ? `${kEnc}.${base}` : `${base}.${kEnc}`;
+  })();
+
+  const decodeOutput = (() => {
+    if (!textInput.trim()) return "";
+    const kObj = keys.find((k) => k.id === selectedKey);
+    let raw = textInput.trim();
+    if (kObj) {
+      const kEnc = toB64(kObj.value);
+      const sep = ".";
+      if (keyPos === "prefix" && raw.startsWith(kEnc + sep)) raw = raw.slice(kEnc.length + 1);
+      if (keyPos === "suffix" && raw.endsWith(sep + kEnc))   raw = raw.slice(0, raw.length - kEnc.length - 1);
+    }
+    return fromB64(raw) ?? "⚠ Base64 invalide";
+  })();
+
+  /* ── Keys tab ── */
+  const [newKeyName,  setNewKeyName]  = useState("");
+  const [newKeyValue, setNewKeyValue] = useState("");
+
+  const addKey = () => {
+    const n = newKeyName.trim(); const v = newKeyValue.trim();
+    if (!n || !v) return;
+    saveKeys([...keys, { id: crypto.randomUUID(), name: n, value: v }]);
+    setNewKeyName(""); setNewKeyValue("");
+  };
+  const removeKey = (id: string) => {
+    saveKeys(keys.filter((k) => k.id !== id));
+    if (selectedKey === id) setSelectedKey("");
+  };
+
+  const tabBtnSty = (active: boolean) => ({
+    border: active ? "1px solid var(--nebula)" : "1px solid var(--stroke)",
+    background: active ? "rgba(108,99,255,.1)" : "transparent",
+    color: active ? "var(--halo)" : "var(--muted)",
+  } as React.CSSProperties);
+
+  const inputSty = {
+    border: "1px solid var(--stroke)",
+    background: "rgba(255,255,255,.03)",
+    color: "var(--text)",
+  } as React.CSSProperties;
+
+  return (
     <div className="space-y-4">
-      <DropZone accept="image/*" onFiles={(f)=>{const r=new FileReader();r.onload=(e)=>setData(e.target!.result as string);r.readAsDataURL(f[0]);}} label="🖼 Glisse une image ici" />
-      {data && <>
-        <textarea readOnly value={data} className="h-24 w-full resize-y rounded-xl px-4 py-3 font-mono text-[10px] focus:outline-none" style={{ border:"1px solid var(--stroke)", background:"rgba(255,255,255,.02)", color:"var(--muted)" }} />
-        <div className="flex flex-wrap gap-2">
-          {([["raw","Copier Base64"],["img","Copier <img>"],["css","Copier CSS url()"]] as const).map(([m,l])=>(
-            <ToggleBtn key={m} active={copied===m} onClick={()=>copy(m)}>{copied===m?"✓ Copié !":l}</ToggleBtn>
-          ))}
+      {/* Sub-tabs */}
+      <div className="flex gap-2">
+        {([["image", "🖼 Image"], ["text", "📝 Texte"], ["keys", "🔑 Clés"]] as const).map(([t, label]) => (
+          <button key={t} onClick={() => setTab(t)}
+            className="rounded-lg px-3 py-1.5 text-xs font-medium transition"
+            style={tabBtnSty(tab === t)}>
+            {label}{t === "keys" && keys.length > 0 ? ` (${keys.length})` : ""}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Image tab ── */}
+      {tab === "image" && (
+        <div className="space-y-4">
+          <DropZone accept="image/*"
+            onFiles={(f) => { const r = new FileReader(); r.onload = (e) => setImgData(e.target!.result as string); r.readAsDataURL(f[0]); }}
+            label="🖼 Glisse une image ici" />
+          {imgData && (
+            <>
+              <div className="flex items-center gap-3">
+                <img src={imgData} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" style={{ border: "1px solid var(--stroke)" }} />
+                <textarea readOnly value={imgData}
+                  className="flex-1 h-16 resize-none rounded-xl px-3 py-2 font-mono text-[10px] focus:outline-none"
+                  style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.02)", color: "var(--muted)" }} />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {([["raw", "Copier Base64"], ["img", "Copier <img>"], ["css", "Copier CSS url()"]] as const).map(([m, l]) => (
+                  <ToggleBtn key={m} active={imgCopied === m} onClick={() => copyImg(m)}>
+                    {imgCopied === m ? "✓ Copié !" : l}
+                  </ToggleBtn>
+                ))}
+              </div>
+            </>
+          )}
         </div>
-      </>}
+      )}
+
+      {/* ── Text tab ── */}
+      {tab === "text" && (
+        <div className="space-y-4">
+          {/* Mode toggle */}
+          <div className="flex gap-2">
+            {(["encode", "decode"] as const).map((m) => (
+              <button key={m} onClick={() => { setTextMode(m); setTextInput(""); }}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium transition"
+                style={tabBtnSty(textMode === m)}>
+                {m === "encode" ? "Encoder" : "Décoder"}
+              </button>
+            ))}
+          </div>
+
+          {/* Key selector (shown for both encode + decode) */}
+          {keys.length > 0 && (
+            <div className="rounded-xl p-3 flex flex-col gap-2" style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.02)" }}>
+              <p className="text-[11px]" style={{ color: "var(--muted)" }}>
+                <Key size={10} className="inline mr-1" />Clé{" "}
+                <span style={{ opacity: .7 }}>(facultatif)</span>
+              </p>
+              <div className="flex flex-wrap gap-2 items-center">
+                <select
+                  value={selectedKey}
+                  onChange={(e) => setSelectedKey(e.target.value)}
+                  className="rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                  style={inputSty}>
+                  <option value="">Aucune clé</option>
+                  {keys.map((k) => (
+                    <option key={k.id} value={k.id}>{k.name}</option>
+                  ))}
+                </select>
+
+                {selectedKey && (
+                  <>
+                    <span className="text-[11px]" style={{ color: "var(--muted)" }}>Position :</span>
+                    {(["prefix", "suffix"] as const).map((p) => (
+                      <button key={p} onClick={() => setKeyPos(p)}
+                        className="rounded-lg px-2.5 py-1 text-xs transition"
+                        style={tabBtnSty(keyPos === p)}>
+                        {p === "prefix" ? "Début" : "Fin"}
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+
+              {selectedKey && (
+                <p className="text-[10px] font-mono" style={{ color: "var(--muted)" }}>
+                  {textMode === "encode"
+                    ? keyPos === "prefix"
+                      ? "résultat = base64(clé) · base64(texte)"
+                      : "résultat = base64(texte) · base64(clé)"
+                    : keyPos === "prefix"
+                      ? "décode en retirant le préfixe base64(clé)"
+                      : "décode en retirant le suffixe base64(clé)"
+                  }
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Input */}
+          <div>
+            <label className="block text-[11px] mb-1.5" style={{ color: "var(--muted)" }}>
+              {textMode === "encode" ? "Texte à encoder" : "Base64 à décoder"}
+            </label>
+            <textarea
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              rows={4}
+              placeholder={textMode === "encode" ? "Entre ton texte ici…" : "Colle le Base64 ici…"}
+              className="w-full resize-y rounded-xl px-4 py-3 text-sm focus:outline-none"
+              style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.03)", color: "var(--text)" }}
+            />
+          </div>
+
+          {/* Output */}
+          {textInput.trim() && (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px]" style={{ color: "var(--muted)" }}>
+                  {textMode === "encode" ? "Résultat encodé" : "Texte décodé"}
+                </label>
+                <CopyBtn text={textMode === "encode" ? encodeOutput : decodeOutput} />
+              </div>
+              <div className="rounded-xl px-4 py-3 font-mono text-[11px] break-all min-h-[56px]"
+                style={{ border: "1px solid var(--nebula)", background: "rgba(108,99,255,.06)", color: "var(--halo)" }}>
+                {textMode === "encode" ? encodeOutput : decodeOutput}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Keys tab ── */}
+      {tab === "keys" && (
+        <div className="space-y-4">
+          <p className="text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
+            Les clés sont stockées localement. Sélectionne-en une dans l'onglet <strong style={{ color: "var(--text)" }}>Texte</strong> pour l'inclure en préfixe ou suffixe du résultat encodé.
+          </p>
+
+          {/* Add key form */}
+          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.02)" }}>
+            <p className="text-xs font-semibold" style={{ color: "var(--text)" }}>Ajouter une clé</p>
+            <div className="grid grid-cols-2 gap-2">
+              <input value={newKeyName} onChange={(e) => setNewKeyName(e.target.value)}
+                placeholder="Nom de la clé"
+                className="rounded-lg px-3 py-2 text-xs focus:outline-none"
+                style={inputSty}
+                onKeyDown={(e) => e.key === "Enter" && addKey()} />
+              <input value={newKeyValue} onChange={(e) => setNewKeyValue(e.target.value)}
+                placeholder="Valeur"
+                className="rounded-lg px-3 py-2 text-xs focus:outline-none"
+                style={inputSty}
+                onKeyDown={(e) => e.key === "Enter" && addKey()} />
+            </div>
+            <button onClick={addKey}
+              disabled={!newKeyName.trim() || !newKeyValue.trim()}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition hover:opacity-85 disabled:opacity-40 w-fit"
+              style={{ background: "linear-gradient(135deg,var(--nebula),var(--indigo))", color: "#fff" }}>
+              <Plus size={12} /> Ajouter
+            </button>
+          </div>
+
+          {/* Key list */}
+          {keys.length === 0 ? (
+            <p className="text-xs text-center py-4" style={{ color: "var(--muted)" }}>Aucune clé enregistrée.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {keys.map((k) => (
+                <div key={k.id}
+                  className="flex items-center gap-3 rounded-xl px-4 py-3"
+                  style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.02)" }}>
+                  <Key size={13} style={{ color: "var(--nebula)", flexShrink: 0 }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold truncate" style={{ color: "var(--text)" }}>{k.name}</p>
+                    <p className="text-[10px] font-mono truncate" style={{ color: "var(--muted)" }}>{k.value}</p>
+                  </div>
+                  <CopyBtn text={k.value} label="Copier valeur" />
+                  <button onClick={() => removeKey(k.id)}
+                    className="flex-shrink-0 rounded-lg p-1.5 transition hover:opacity-80"
+                    style={{ color: "#CF2328", border: "1px solid rgba(207,35,40,.3)" }}>
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
