@@ -124,7 +124,7 @@ export default function CodeEditor({
   return (
     <div
       ref={containerRef}
-      className="w-full overflow-auto rounded-xl"
+      className="w-full h-full"
       style={{ minHeight, background: "#0d1117" }}
     />
   );
