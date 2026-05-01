@@ -8,6 +8,7 @@ import dynamic from "next/dynamic";
 import { db } from "@/lib/orbit/db";
 import { NAV } from "@/lib/shared/nav";
 import type { NavItem } from "@/lib/shared/nav";
+import GreetingClock from "@/components/GreetingClock";
 
 const ProfileEditor = dynamic(() => import("@/components/orbit/ProfileEditor"), { ssr: false });
 
@@ -135,6 +136,8 @@ export default function Navbar() {
           {/* Desktop nav */}
           <nav className="relative hidden items-center gap-5 sm:flex">
             {NAV.map((item) => <NavLink key={item.href} item={item} />)}
+
+            <GreetingClock />
 
             {/* Theme toggle */}
             <motion.button

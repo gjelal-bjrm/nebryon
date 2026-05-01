@@ -6,6 +6,7 @@ import { Sun, Moon, User } from "lucide-react";
 import { db } from "@/lib/orbit/db";
 import { NAV } from "@/lib/shared/nav";
 import OrbitLogo from "./OrbitLogo";
+import GreetingClock from "@/components/GreetingClock";
 
 interface Props {
   onOpenProfile: () => void;
@@ -88,8 +89,9 @@ export default function OrbitTopbar({ onOpenProfile }: Props) {
         })}
       </nav>
 
-      {/* Right — theme + profile */}
-      <div className="flex items-center gap-1.5">
+      {/* Right — greeting + theme + profile */}
+      <div className="flex items-center gap-2.5">
+        <GreetingClock compact />
         <button
           onClick={toggleTheme}
           className="flex items-center justify-center w-7 h-7 rounded-lg transition hover:opacity-80"

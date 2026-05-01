@@ -217,6 +217,20 @@ export default function WelcomeSetup() {
                   placeholder="jean@exemple.com"
                 />
               </div>
+
+              {/* Birthdate */}
+              <div>
+                <label className="block text-[11px] mb-1" style={{ color: "var(--muted)" }}>
+                  Date de naissance <span style={{ opacity: .6 }}>(facultatif — pour un message spécial le jour J)</span>
+                </label>
+                <input
+                  type="date"
+                  value={form.birthdate ?? ""}
+                  onChange={(e) => setF("birthdate", e.target.value)}
+                  className={inputCls}
+                  style={inputSty}
+                />
+              </div>
             </div>
 
             {/* ── Footer ── */}

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Syne } from "next/font/google";
 import ConditionalNavbar from "@/components/ConditionalNavbar";
 import WelcomeSetupLoader from "@/components/WelcomeSetupLoader";
+import BirthdayBannerLoader from "@/components/BirthdayBannerLoader";
 
 const syne = Syne({
   subsets: ["latin"],
@@ -20,6 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr" className={syne.variable}>
       <body className={`${syne.className} min-h-screen antialiased`}>
+        <BirthdayBannerLoader />
         <ConditionalNavbar />
         <WelcomeSetupLoader />
         {children}
