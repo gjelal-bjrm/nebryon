@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Send, Save, ChevronDown, Copy, Check } from "lucide-react";
+import { Send, Save, ChevronDown, Copy, Check, BookmarkCheck } from "lucide-react";
 import dynamic from "next/dynamic";
 import KVEditor from "./KVEditor";
 import type { OrbitRequest, ReqTab, Method } from "@/lib/orbit/types";
@@ -27,9 +27,15 @@ interface Props {
   onSend: () => void;
   onSave: () => void;
   sending: boolean;
+  /** Briefly true after a direct (non-dialog) save */
+  savedFlash?: boolean;
+  /** Name of the currently loaded saved request, null if unsaved */
+  activeName?: string | null;
 }
 
-export default function RequestPanel({ req, onChange, onSend, onSave, sending }: Props) {
+export default function RequestPanel({
+  req, onChange, onSend, onSave, sending, savedFlash = false, activeName = null,
+}: Props) {
   const [tab, setTab] = useState<ReqTab>("params");
   const [methodOpen, setMethodOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -98,11 +104,24 @@ export default function RequestPanel({ req, onChange, onSend, onSave, sending }:
         {/* Save */}
         <button
           onClick={onSave}
-          className="flex items-center gap-1.5 rounded-lg px-3 h-9 text-xs transition hover:opacity-80"
-          style={{ border: "1px solid var(--stroke)", color: "var(--muted)" }}
-          title="Save to collection"
+          className="flex items-center gap-1.5 rounded-lg px-3 h-9 text-xs font-medium transition hover:opacity-80"
+          style={{
+            border: "1px solid var(--stroke)",
+            color: savedFlash ? "var(--nebula)" : "var(--muted)",
+            minWidth: "72px",
+          }}
+          title={
+            savedFlash    ? "Saved!"                              :
+            activeName    ? `Save changes to "${activeName}" (Ctrl+S)` :
+                            "Save to collection (Ctrl+S)"
+          }
         >
-          <Save size={14} />
+          {savedFlash
+            ? <><Check size={13} /> Saved!</>
+            : activeName
+              ? <><BookmarkCheck size={13} /> Save</>
+              : <><Save size={13} /> Save</>
+          }
         </button>
 
         {/* Send */}
