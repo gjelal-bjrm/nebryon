@@ -211,11 +211,7 @@ export default function HeroDemos() {
         transition={{ duration: 0.6, delay: 0.5 }}
         style={{ color: "var(--muted)" }}
       >
-        Et bien plus encore —{" "}
-        <a href="#tools" className="transition hover:opacity-80"
-          style={{ color: "var(--nebula)", textDecoration: "underline", textUnderlineOffset: "3px" }}>
-          explorer tous les outils
-        </a>
+        Et bien plus encore !
       </motion.p>
     </div>
   );
