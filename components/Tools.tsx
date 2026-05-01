@@ -1833,13 +1833,15 @@ function CVTool() {
 export default function Tools() {
   const reduce = useReducedMotion();
   const [active, setActive] = useState<ToolId | null>(null);
-  const [category, setCategory] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return localStorage.getItem("nebryon-tools-category") || null;
-  });
+  const [category, setCategory] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
-  // Persist selected category
+  // Restore persisted category after hydration, then keep in sync
+  useEffect(() => {
+    const saved = localStorage.getItem("nebryon-tools-category");
+    if (saved) setCategory(saved);
+  }, []);
+
   useEffect(() => {
     if (category) localStorage.setItem("nebryon-tools-category", category);
     else localStorage.removeItem("nebryon-tools-category");
