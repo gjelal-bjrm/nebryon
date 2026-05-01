@@ -48,26 +48,78 @@ function buildRows(L: string[], R: string[], ignoreWS: boolean): Row[] {
   let li = 0, ri = 0, ch = -1;
   const rows: Row[] = [];
   let k = 0;
+
   while (k < diff.length) {
-    const cur = diff[k], nxt = diff[k+1];
-    if (cur.type === "eq") {
+    if (diff[k].type === "eq") {
       rows.push({ lNum:li+1, lText:L[li], lKind:"eq", rNum:ri+1, rText:R[ri], rKind:"eq", chunk:-1 });
       li++; ri++; k++;
-    } else if (cur.type === "del" && nxt?.type === "add") {
-      ch++;
-      rows.push({ lNum:li+1, lText:L[li], lKind:"mod", rNum:ri+1, rText:R[ri], rKind:"mod", chunk:ch });
-      li++; ri++; k+=2;
-    } else if (cur.type === "del") {
-      ch++;
-      rows.push({ lNum:li+1, lText:L[li], lKind:"del", rNum:null, rText:null, rKind:"blank", chunk:ch });
-      li++; k++;
     } else {
+      // Collect all consecutive non-eq items into one chunk
       ch++;
-      rows.push({ lNum:null, lText:null, lKind:"blank", rNum:ri+1, rText:R[ri], rKind:"add", chunk:ch });
-      ri++; k++;
+      const dels: number[] = [];   // li indices
+      const adds: number[] = [];   // ri indices
+      while (k < diff.length && diff[k].type !== "eq") {
+        if (diff[k].type === "del") { dels.push(li); li++; }
+        else                        { adds.push(ri); ri++; }
+        k++;
+      }
+      // Pair dels+adds as "mod", remainder as pure del/add
+      const paired = Math.min(dels.length, adds.length);
+      for (let p = 0; p < paired; p++) {
+        rows.push({ lNum:dels[p]+1, lText:L[dels[p]], lKind:"mod",
+                    rNum:adds[p]+1, rText:R[adds[p]], rKind:"mod", chunk:ch });
+      }
+      for (let p = paired; p < dels.length; p++) {
+        rows.push({ lNum:dels[p]+1, lText:L[dels[p]], lKind:"del",
+                    rNum:null, rText:null, rKind:"blank", chunk:ch });
+      }
+      for (let p = paired; p < adds.length; p++) {
+        rows.push({ lNum:null, lText:null, lKind:"blank",
+                    rNum:adds[p]+1, rText:R[adds[p]], rKind:"add", chunk:ch });
+      }
     }
   }
   return rows;
+}
+
+/* ════════════════════════════════════════════════════════════
+   Apply chunk helpers
+════════════════════════════════════════════════════════════ */
+
+/** Copy left chunk → right (make right match left for this chunk) */
+function applyLtoR(rows: Row[], chunkIdx: number, rightLines: string[]): string[] {
+  const cr    = rows.filter(r => r.chunk === chunkIdx);
+  const src   = cr.filter(r => r.lText !== null).map(r => r.lText!);
+  const dstNs = cr.filter(r => r.rNum  !== null).map(r => r.rNum! - 1);
+  const out   = [...rightLines];
+  if (dstNs.length > 0) {
+    out.splice(dstNs[0], dstNs.length, ...src);
+  } else {
+    // Pure deletion in left → insert into right at the correct position
+    const fi = rows.findIndex(r => r.chunk === chunkIdx);
+    let at = 0;
+    for (let i = fi - 1; i >= 0; i--) { if (rows[i].rNum !== null) { at = rows[i].rNum!; break; } }
+    out.splice(at, 0, ...src);
+  }
+  return out;
+}
+
+/** Copy right chunk → left (make left match right for this chunk) */
+function applyRtoL(rows: Row[], chunkIdx: number, leftLines: string[]): string[] {
+  const cr    = rows.filter(r => r.chunk === chunkIdx);
+  const src   = cr.filter(r => r.rText !== null).map(r => r.rText!);
+  const dstNs = cr.filter(r => r.lNum  !== null).map(r => r.lNum! - 1);
+  const out   = [...leftLines];
+  if (dstNs.length > 0) {
+    out.splice(dstNs[0], dstNs.length, ...src);
+  } else {
+    // Pure addition in right → insert into left at the correct position
+    const fi = rows.findIndex(r => r.chunk === chunkIdx);
+    let at = 0;
+    for (let i = fi - 1; i >= 0; i--) { if (rows[i].lNum !== null) { at = rows[i].lNum!; break; } }
+    out.splice(at, 0, ...src);
+  }
+  return out;
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -129,6 +181,8 @@ const WHL = { del:"rgba(220,30,30,.70)", add:"rgba(30,200,70,.65)" };
 const RH = 21;
 // Number column width px
 const NW = 52;
+// Centre gutter (arrows) width px
+const GW = 34;
 // Divider color
 const DIV = "rgba(255,255,255,.10)";
 // Equal line opacity
@@ -211,6 +265,14 @@ export default function DiffBuilder({ onClose }: { onClose: () => void }) {
   function copyL() { navigator.clipboard.writeText(leftText).then(()=>{ setCopiedL(true); setTimeout(()=>setCopiedL(false),1800); }); }
   function copyR() { navigator.clipboard.writeText(rightText).then(()=>{ setCopiedR(true); setTimeout(()=>setCopiedR(false),1800); }); }
   function swap()  { const t=leftText; setLeftText(rightText); setRightText(t); }
+
+  /* ── Apply chunk ─────────────────────────────────────────── */
+  function handleApply(chunkIdx: number, dir: "ltr" | "rtl") {
+    const lLines = leftText.split("\n");
+    const rLines = rightText.split("\n");
+    if (dir === "ltr") setRightText(applyLtoR(rows, chunkIdx, rLines).join("\n"));
+    else               setLeftText(applyRtoL(rows, chunkIdx, lLines).join("\n"));
+  }
 
   if (!mounted) return null;
 
@@ -320,6 +382,7 @@ export default function DiffBuilder({ onClose }: { onClose: () => void }) {
               copiedL={copiedL} copiedR={copiedR}
               onClearL={()=>setLeftText("")} onClearR={()=>setRightText("")}
               hasL={!!leftText} hasR={!!rightText}
+              onApply={handleApply}
             />
       }
     </div>,
@@ -342,12 +405,13 @@ interface DiffViewProps {
   copiedL:boolean; copiedR:boolean;
   onClearL:()=>void; onClearR:()=>void;
   hasL:boolean; hasR:boolean;
+  onApply:(chunkIdx:number, dir:"ltr"|"rtl")=>void;
 }
 
 function DiffView({ rows, wrap, wordLevel, scrollRef,
   onEditL, onEditR, onLoadL, onLoadR,
   onCopyL, onCopyR, copiedL, copiedR,
-  onClearL, onClearR, hasL, hasR,
+  onClearL, onClearR, hasL, hasR, onApply,
 }: DiffViewProps) {
 
   const monoFont = "ui-monospace,'Cascadia Code',Consolas,'Courier New',monospace";
@@ -386,8 +450,8 @@ function DiffView({ rows, wrap, wordLevel, scrollRef,
             Texte A — original
           </span>
         </div>
-        {/* Divider */}
-        <div style={{ width:1, background:DIV, flexShrink:0 }}/>
+        {/* Gutter header */}
+        <div style={{ width:GW, minWidth:GW, flexShrink:0, background:"rgba(0,0,0,.25)", borderLeft:`1px solid ${DIV}`, borderRight:`1px solid ${DIV}` }}/>
         {/* Right header */}
         <div style={{ width:NW, flexShrink:0 }} />
         <div style={{ flex:1, display:"flex", alignItems:"center", gap:6, padding:"0 10px" }}>
@@ -460,8 +524,42 @@ function DiffView({ rows, wrap, wordLevel, scrollRef,
                 }
               </div>
 
-              {/* ── Centre divider ── */}
-              <div style={{ width:1, minWidth:1, background:DIV }}/>
+              {/* ── Centre gutter with apply arrows ── */}
+              <div style={{
+                width:GW, minWidth:GW,
+                display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+                gap:1,
+                background:"rgba(0,0,0,.25)",
+                borderLeft:`1px solid ${DIV}`, borderRight:`1px solid ${DIV}`,
+                flexShrink:0,
+              }}>
+                {isChunkStart && row.chunk >= 0 && (
+                  <>
+                    {/* ← apply right → left */}
+                    <button
+                      onClick={e => { e.stopPropagation(); onApply(row.chunk, "rtl"); }}
+                      title="Appliquer B → A"
+                      style={{
+                        width:22, height:13, borderRadius:3, border:"none", cursor:"pointer",
+                        background:"rgba(30,180,70,.35)", color:"rgba(150,255,160,.95)",
+                        display:"flex", alignItems:"center", justifyContent:"center",
+                        fontSize:10, lineHeight:1, padding:0,
+                      }}
+                    >←</button>
+                    {/* → apply left → right */}
+                    <button
+                      onClick={e => { e.stopPropagation(); onApply(row.chunk, "ltr"); }}
+                      title="Appliquer A → B"
+                      style={{
+                        width:22, height:13, borderRadius:3, border:"none", cursor:"pointer",
+                        background:"rgba(210,30,30,.30)", color:"rgba(255,150,150,.95)",
+                        display:"flex", alignItems:"center", justifyContent:"center",
+                        fontSize:10, lineHeight:1, padding:0,
+                      }}
+                    >→</button>
+                  </>
+                )}
+              </div>
 
               {/* ── Right line number ── */}
               <div style={{
