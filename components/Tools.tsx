@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   Image as ImageIcon,
@@ -28,10 +28,12 @@ import {
   Maximize2,
   Minimize2,
   MapPin,
+  GitCompare,
+  FileText,
 } from "lucide-react";
 
 /* ── Types ─────────────────────────────────────────────── */
-type ToolId = "resize" | "merge" | "extract" | "convert" | "password" | "tva" | "date" | "units" | "base64" | "meta" | "qrcode" | "clock";
+type ToolId = "resize" | "merge" | "extract" | "convert" | "password" | "tva" | "date" | "units" | "base64" | "meta" | "qrcode" | "clock" | "diff" | "lorem";
 
 interface Tool {
   id: ToolId;
@@ -55,6 +57,8 @@ const TOOLS: Tool[] = [
   { id: "tva",      icon: <Receipt size={18} />,        title: "Calculateur TVA",            desc: "Calcule HT ↔ TTC selon le taux de ton pays (CH, FR, BE…).",                          badge: "Finance" },
   { id: "units",    icon: <Ruler size={18} />,          title: "Convertisseur d'unités",     desc: "Longueur, masse, température, surface — km/miles, kg/lbs, °C/°F…",                   badge: "Quotidien" },
   { id: "clock",    icon: <Clock size={18} />,          title: "Horloge",                    desc: "Affichage de l'heure en grand, personnalisable — idéal pour les examens ou réunions.", badge: "Quotidien" },
+  { id: "diff",     icon: <GitCompare size={18} />,    title: "Comparateur de texte",       desc: "Compare deux blocs de texte et affiche les différences ligne par ligne ou mot par mot.", badge: "Dev" },
+  { id: "lorem",    icon: <FileText size={18} />,      title: "Lorem Ipsum",                desc: "Génère du texte de remplissage par paragraphes, phrases ou mots.",                     badge: "Dev" },
 ];
 
 /* ── Helpers ────────────────────────────────────────────── */
@@ -1281,6 +1285,322 @@ function MetaTool() {
   );
 }
 
+/* ── TEXT DIFF ──────────────────────────────────────────── */
+
+type DiffItem<T> = { type: "eq" | "add" | "del"; val: T };
+
+function diffSeq<T>(a: T[], b: T[]): DiffItem<T>[] {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = (a[i-1] as unknown) === (b[j-1] as unknown)
+        ? dp[i-1][j-1] + 1
+        : Math.max(dp[i-1][j], dp[i][j-1]);
+  const res: DiffItem<T>[] = [];
+  let i = m, j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && (a[i-1] as unknown) === (b[j-1] as unknown)) {
+      res.unshift({ type: "eq",  val: a[i-1] }); i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+      res.unshift({ type: "add", val: b[j-1] }); j--;
+    } else {
+      res.unshift({ type: "del", val: a[i-1] }); i--;
+    }
+  }
+  return res;
+}
+
+function WordDiffPair({ delLine, addLine }: { delLine: string; addLine: string }) {
+  const dw = diffSeq(delLine.split(/(\s+)/), addLine.split(/(\s+)/));
+  return (
+    <>
+      <div className="flex py-0.5 px-3" style={{ background: "rgba(207,35,40,.08)", borderBottom: "1px solid rgba(255,255,255,.03)" }}>
+        <span className="w-4 text-[10px] select-none mr-3 flex-shrink-0 font-mono" style={{ color: "#CF2328", opacity: .7 }}>-</span>
+        <span className="font-mono text-xs whitespace-pre-wrap break-all flex-1">
+          {dw.filter(d => d.type !== "add").map((d, i) => (
+            <span key={i} style={d.type === "del"
+              ? { background: "rgba(207,35,40,.4)", color: "#fca5a5", borderRadius: "2px" }
+              : { color: "var(--muted)" }}>
+              {d.val}
+            </span>
+          ))}
+        </span>
+      </div>
+      <div className="flex py-0.5 px-3" style={{ background: "rgba(34,197,94,.08)", borderBottom: "1px solid rgba(255,255,255,.03)" }}>
+        <span className="w-4 text-[10px] select-none mr-3 flex-shrink-0 font-mono" style={{ color: "#22c55e", opacity: .7 }}>+</span>
+        <span className="font-mono text-xs whitespace-pre-wrap break-all flex-1">
+          {dw.filter(d => d.type !== "del").map((d, i) => (
+            <span key={i} style={d.type === "add"
+              ? { background: "rgba(34,197,94,.35)", color: "#86efac", borderRadius: "2px" }
+              : { color: "var(--muted)" }}>
+              {d.val}
+            </span>
+          ))}
+        </span>
+      </div>
+    </>
+  );
+}
+
+function DiffTool() {
+  const [left,  setLeft]  = useState("");
+  const [right, setRight] = useState("");
+  const [mode,  setMode]  = useState<"lines" | "words">("lines");
+
+  const lineDiff = useMemo(() => {
+    if (!left && !right) return [];
+    return diffSeq(left.split("\n"), right.split("\n"));
+  }, [left, right]);
+
+  const stats = useMemo(() => {
+    let add = 0, del = 0, eq = 0;
+    for (const d of lineDiff) {
+      if (d.type === "add") add++;
+      else if (d.type === "del") del++;
+      else eq++;
+    }
+    return { add, del, eq };
+  }, [lineDiff]);
+
+  const inputSty = {
+    border: "1px solid var(--stroke)",
+    background: "rgba(255,255,255,.03)",
+    color: "var(--text)",
+    resize: "vertical" as const,
+  };
+
+  const hasDiff  = left || right;
+  const identical = hasDiff && stats.add === 0 && stats.del === 0;
+
+  return (
+    <div className="space-y-4">
+      {/* Mode */}
+      <div className="flex gap-2">
+        {(["lines", "words"] as const).map((m) => (
+          <button key={m} onClick={() => setMode(m)}
+            className="rounded-lg px-3 py-1.5 text-xs font-medium transition"
+            style={mode === m
+              ? { border: "1px solid var(--nebula)", background: "rgba(108,99,255,.1)", color: "var(--halo)" }
+              : { border: "1px solid var(--stroke)", color: "var(--muted)" }}>
+            {m === "lines" ? "Par lignes" : "Par mots"}
+          </button>
+        ))}
+      </div>
+
+      {/* Inputs */}
+      <div className="grid grid-cols-2 gap-3">
+        {([
+          [left,  setLeft,  "Texte A — original"],
+          [right, setRight, "Texte B — modifié"],
+        ] as const).map(([val, setter, label], idx) => (
+          <div key={idx}>
+            <label className="block text-[11px] mb-1.5" style={{ color: "var(--muted)" }}>{label}</label>
+            <textarea value={val} onChange={(e) => (setter as (v: string) => void)(e.target.value)}
+              rows={6} placeholder="Colle ton texte ici…"
+              className="w-full rounded-xl px-4 py-3 text-xs font-mono focus:outline-none"
+              style={inputSty} />
+          </div>
+        ))}
+      </div>
+
+      {/* Stats */}
+      {hasDiff && !identical && (
+        <div className="flex gap-4 text-xs select-none">
+          <span style={{ color: "#4ade80" }}>+{stats.add} ajout{stats.add > 1 ? "s" : ""}</span>
+          <span style={{ color: "#f87171" }}>−{stats.del} suppression{stats.del > 1 ? "s" : ""}</span>
+          <span style={{ color: "var(--muted)" }}>{stats.eq} ligne{stats.eq > 1 ? "s" : ""} identique{stats.eq > 1 ? "s" : ""}</span>
+        </div>
+      )}
+
+      {/* Identical */}
+      {identical && (
+        <p className="text-xs text-center py-2 font-medium" style={{ color: "#4ade80" }}>
+          ✓ Les deux textes sont identiques.
+        </p>
+      )}
+
+      {/* Diff output */}
+      {hasDiff && !identical && lineDiff.length > 0 && (
+        <div className="rounded-xl overflow-auto max-h-80"
+          style={{ border: "1px solid var(--stroke)", background: "rgba(0,0,0,.35)" }}>
+          {mode === "lines"
+            ? lineDiff.map((d, i) => (
+                <div key={i} className="flex py-0.5 px-3"
+                  style={{
+                    background: d.type === "add" ? "rgba(34,197,94,.08)" : d.type === "del" ? "rgba(207,35,40,.08)" : "transparent",
+                    borderBottom: "1px solid rgba(255,255,255,.025)",
+                  }}>
+                  <span className="w-4 text-[10px] select-none mr-3 flex-shrink-0 font-mono"
+                    style={{ color: d.type === "add" ? "#22c55e" : d.type === "del" ? "#CF2328" : "var(--muted)", opacity: d.type === "eq" ? .3 : .8 }}>
+                    {d.type === "add" ? "+" : d.type === "del" ? "−" : " "}
+                  </span>
+                  <span className="font-mono text-xs whitespace-pre-wrap break-all flex-1"
+                    style={{ color: d.type === "add" ? "#4ade80" : d.type === "del" ? "#f87171" : "var(--muted)", opacity: d.type === "eq" ? .55 : 1 }}>
+                    {d.val || " "}
+                  </span>
+                </div>
+              ))
+            : (() => {
+                const elems: React.ReactNode[] = [];
+                let idx = 0;
+                while (idx < lineDiff.length) {
+                  const cur  = lineDiff[idx];
+                  const next = lineDiff[idx + 1];
+                  if (cur.type === "del" && next?.type === "add") {
+                    elems.push(<WordDiffPair key={idx} delLine={cur.val} addLine={next.val} />);
+                    idx += 2;
+                  } else {
+                    elems.push(
+                      <div key={idx} className="flex py-0.5 px-3"
+                        style={{
+                          background: cur.type === "add" ? "rgba(34,197,94,.08)" : cur.type === "del" ? "rgba(207,35,40,.08)" : "transparent",
+                          borderBottom: "1px solid rgba(255,255,255,.025)",
+                        }}>
+                        <span className="w-4 text-[10px] select-none mr-3 flex-shrink-0 font-mono"
+                          style={{ color: cur.type === "add" ? "#22c55e" : cur.type === "del" ? "#CF2328" : "var(--muted)", opacity: cur.type === "eq" ? .3 : .8 }}>
+                          {cur.type === "add" ? "+" : cur.type === "del" ? "−" : " "}
+                        </span>
+                        <span className="font-mono text-xs whitespace-pre-wrap break-all flex-1"
+                          style={{ color: cur.type === "add" ? "#4ade80" : cur.type === "del" ? "#f87171" : "var(--muted)", opacity: cur.type === "eq" ? .55 : 1 }}>
+                          {cur.val || " "}
+                        </span>
+                      </div>
+                    );
+                    idx++;
+                  }
+                }
+                return elems;
+              })()
+          }
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── LOREM IPSUM ─────────────────────────────────────────── */
+
+const LOREM_POOL = (
+  "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore " +
+  "et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip " +
+  "ex ea commodo consequat duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu " +
+  "fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt " +
+  "mollit anim id est laborum curabitur pretium tincidunt lacus nulla mauris pellentesque porta augue sodales " +
+  "semper tempus habitant morbi tristique senectus netus malesuada fames turpis egestas proin pharetra " +
+  "nonummy pede mauris et orci aenean nec lorem in porttitor faucibus orci luctus ultrices posuere cubilia " +
+  "curae morbi lacinia molestie dui praesent blandit laoreet nibh fusce ac quam viverra vitae"
+).split(" ");
+
+function cap(s: string) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function buildSentence(startIdx: number, len: number): string {
+  const words = Array.from({ length: len }, (_, k) => LOREM_POOL[(startIdx + k) % LOREM_POOL.length]);
+  return cap(words.join(" ")) + ".";
+}
+
+function buildLorem(type: "paragraphs" | "sentences" | "words", count: number, startWithLorem: boolean): string {
+  const offset = startWithLorem ? 0 : 12; // skip past "lorem ipsum dolor..."
+
+  if (type === "words") {
+    const words = Array.from({ length: count }, (_, k) => LOREM_POOL[(offset + k) % LOREM_POOL.length]);
+    return cap(words.join(" ")) + ".";
+  }
+
+  if (type === "sentences") {
+    let wi = offset;
+    return Array.from({ length: count }, () => {
+      const len = 8 + (wi % 7);
+      const s = buildSentence(wi, len);
+      wi += len;
+      return s;
+    }).join(" ");
+  }
+
+  // paragraphs
+  let wi = offset;
+  return Array.from({ length: count }, () => {
+    const numS = 4 + (wi % 3);
+    const sentences = Array.from({ length: numS }, () => {
+      const len = 7 + (wi % 8);
+      const s = buildSentence(wi, len);
+      wi += len;
+      return s;
+    });
+    return sentences.join(" ");
+  }).join("\n\n");
+}
+
+function LoremTool() {
+  const [type,        setType]        = useState<"paragraphs" | "sentences" | "words">("paragraphs");
+  const [count,       setCount]       = useState(3);
+  const [startLorem,  setStartLorem]  = useState(true);
+  const [copied,      setCopied]      = useState(false);
+
+  const maxCount = type === "words" ? 500 : type === "sentences" ? 50 : 10;
+
+  const text = useMemo(() => buildLorem(type, count, startLorem), [type, count, startLorem]);
+
+  const copy = () => {
+    navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); });
+  };
+
+  const typeLabels = { paragraphs: "paragraphe", sentences: "phrase", words: "mot" };
+
+  return (
+    <div className="space-y-4">
+      {/* Type */}
+      <div className="flex gap-2 flex-wrap">
+        {(["paragraphs", "sentences", "words"] as const).map((t) => (
+          <button key={t}
+            onClick={() => { setType(t); setCount(t === "words" ? 50 : t === "sentences" ? 5 : 3); }}
+            className="rounded-lg px-3 py-1.5 text-xs font-medium transition"
+            style={type === t
+              ? { border: "1px solid var(--nebula)", background: "rgba(108,99,255,.1)", color: "var(--halo)" }
+              : { border: "1px solid var(--stroke)", color: "var(--muted)" }}>
+            {t === "paragraphs" ? "Paragraphes" : t === "sentences" ? "Phrases" : "Mots"}
+          </button>
+        ))}
+      </div>
+
+      {/* Options row */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2">
+          <label className="text-xs" style={{ color: "var(--muted)" }}>Quantité :</label>
+          <input type="number" min={1} max={maxCount} value={count}
+            onChange={(e) => setCount(Math.max(1, Math.min(maxCount, parseInt(e.target.value) || 1)))}
+            className="rounded-lg px-2 py-1 text-xs w-16 text-center focus:outline-none"
+            style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.03)", color: "var(--text)" }} />
+          <span className="text-xs" style={{ color: "var(--muted)" }}>
+            {typeLabels[type]}{count > 1 ? "s" : ""}
+          </span>
+        </div>
+
+        <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none" style={{ color: "var(--muted)" }}>
+          <input type="checkbox" checked={startLorem} onChange={(e) => setStartLorem(e.target.checked)} />
+          Commencer par <em>"Lorem ipsum…"</em>
+        </label>
+      </div>
+
+      {/* Output */}
+      <div className="relative">
+        <button onClick={copy}
+          className="absolute top-2 right-2 z-10 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] transition hover:opacity-80"
+          style={copied
+            ? { border: "1px solid var(--nebula)", background: "rgba(108,99,255,.12)", color: "var(--halo)" }
+            : { border: "1px solid var(--stroke)", background: "var(--nav-bg)", color: "var(--muted)" }}>
+          {copied ? <Check size={11} /> : <Copy size={11} />}
+          {copied ? "Copié !" : "Copier"}
+        </button>
+        <textarea readOnly value={text}
+          rows={type === "paragraphs" ? 9 : 5}
+          className="w-full rounded-xl px-4 py-3 pr-24 text-sm leading-relaxed focus:outline-none resize-none"
+          style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.02)", color: "var(--text)" }} />
+      </div>
+    </div>
+  );
+}
+
 /* ── CLOCK ──────────────────────────────────────────────── */
 
 const CLOCK_COLORS = {
@@ -1502,6 +1822,7 @@ export default function Tools() {
     convert: <ConvertTool />, password: <PasswordTool />, tva: <TVATool />,
     date: <DateTool />, units: <UnitsTool />, base64: <Base64Tool />,
     meta: <MetaTool />, qrcode: <QRTool />, clock: <ClockTool />,
+    diff: <DiffTool />, lorem: <LoremTool />,
   };
 
   return (
