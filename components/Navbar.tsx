@@ -83,13 +83,16 @@ export default function Navbar() {
   }, [open]);
 
   const NavLink = ({ item }: { item: NavItem }) => {
-    const isApp = !item.href.startsWith("#");
-    const isActive = !isApp && active === item.href;
+    const isHash   = item.href.startsWith("#");
+    const isApp    = !isHash;
+    const isActive = isHash && active === item.href;
+    // Always use absolute anchors so hash links work from any page (e.g. /projects/lisan)
+    const resolvedHref = isHash ? `/${item.href}` : item.href;
 
     if (isApp) {
       return (
         <a
-          href={item.href}
+          href={resolvedHref}
           className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold transition"
           style={{ border: "1px solid var(--nebula)", background: "rgba(108,99,255,.1)", color: "var(--halo)" }}
         >
@@ -100,7 +103,7 @@ export default function Navbar() {
 
     return (
       <a
-        href={item.href}
+        href={resolvedHref}
         onClick={() => { setActive(item.href); setOpen(false); }}
         className="relative px-1 py-2 text-sm transition"
         style={{ color: isActive ? "var(--halo)" : "var(--muted)" }}
@@ -256,7 +259,8 @@ export default function Navbar() {
                   style={{ border: "1px solid var(--stroke)", background: "var(--card-bg)" }}>
                   <div className="flex flex-col">
                     {NAV.map((item) => (
-                      <a key={item.href} href={item.href}
+                      <a key={item.href}
+                        href={item.href.startsWith("#") ? `/${item.href}` : item.href}
                         onClick={() => { setActive(item.href); setOpen(false); }}
                         className="rounded-xl px-3 py-3 text-sm transition"
                         style={{ color: "var(--text)" }}>

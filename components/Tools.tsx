@@ -32,15 +32,13 @@ import {
   GitCompare,
   FileText,
   ScrollText,
-  BarChart2,
 } from "lucide-react";
 
 const CVBuilder    = dynamic(() => import("./cv/CVBuilder"),      { ssr: false });
 const DiffBuilder  = dynamic(() => import("./diff/DiffBuilder"),  { ssr: false });
-const PulsarTool   = dynamic(() => import("./pulsar/PulsarTool"), { ssr: false });
 
 /* ── Types ─────────────────────────────────────────────── */
-type ToolId = "resize" | "merge" | "extract" | "convert" | "password" | "tva" | "date" | "units" | "base64" | "meta" | "qrcode" | "clock" | "diff" | "lorem" | "cv" | "pulsar";
+type ToolId = "resize" | "merge" | "extract" | "convert" | "password" | "tva" | "date" | "units" | "base64" | "meta" | "qrcode" | "clock" | "diff" | "lorem" | "cv";
 
 interface Tool {
   id: ToolId;
@@ -67,7 +65,6 @@ const TOOLS: Tool[] = [
   { id: "diff",     icon: <GitCompare size={18} />,    title: "Comparateur de texte",       desc: "Compare deux blocs de texte et affiche les différences ligne par ligne ou mot par mot.", badge: "Dev" },
   { id: "lorem",    icon: <FileText size={18} />,      title: "Lorem Ipsum",                desc: "Génère du texte de remplissage par paragraphes, phrases ou mots.",                     badge: "Dev" },
   { id: "cv",       icon: <ScrollText size={18} />,   title: "Générateur de CV",           desc: "Crée un CV professionnel et téléchargeable en PDF. Templates, couleurs, mode ATS.",       badge: "Pro" },
-  { id: "pulsar",   icon: <BarChart2 size={18} />,   title: "Pulsar",                     desc: "Charge un CSV, Excel, JSON ou XML et explore tes données : aperçu tabulaire, statistiques par colonne et export filtré.", badge: "Data" },
 ];
 
 /* ── Helpers ────────────────────────────────────────────── */
@@ -1719,11 +1716,6 @@ function CVTool() {
   );
 }
 
-/* ── PULSAR ─────────────────────────────────────────────── */
-function PulsarWrapper() {
-  return <PulsarTool />;
-}
-
 /* ── MAIN ───────────────────────────────────────────────── */
 export default function Tools() {
   const reduce = useReducedMotion();
@@ -1753,7 +1745,6 @@ export default function Tools() {
     date: <DateTool />, units: <UnitsTool />, base64: <Base64Tool />,
     meta: <MetaTool />, qrcode: <QRTool />, clock: <ClockTool />,
     diff: <DiffTool />, lorem: <LoremTool />, cv: <CVTool />,
-    pulsar: <PulsarWrapper />,
   };
 
   return (

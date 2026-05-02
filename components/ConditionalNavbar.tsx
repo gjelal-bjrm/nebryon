@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import Navbar from "./Navbar";
 
 /** Renders the Navbar on all routes except full-screen apps */
-const HIDDEN_ON = ["/orbit"];
+const HIDDEN_ON = ["/orbit", "/pulsar"];
 
 export default function ConditionalNavbar() {
   const pathname = usePathname();

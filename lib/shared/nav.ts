@@ -9,4 +9,5 @@ export const NAV: NavItem[] = [
   { label: "Outils",  href: "#tools" },
   { label: "Projets", href: "#projects" },
   { label: "Orbit",   href: "/orbit" },
+  { label: "Pulsar",  href: "/pulsar" },
 ];

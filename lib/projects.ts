@@ -23,4 +23,12 @@ export const projects: Project[] = [
     tags: ["Next.js", "TypeScript", "Dexie", "CodeMirror"],
     type: "showcase",
   },
+  {
+    title: "Nebryon Pulsar",
+    description:
+      "Lecteur et analyseur de données — charge un CSV, Excel, JSON ou XML, explore les données en tableau trié/filtrable, consulte les statistiques par colonne et exporte le résultat.",
+    href: "/pulsar",
+    tags: ["Next.js", "TypeScript", "PapaParse", "XLSX"],
+    type: "showcase",
+  },
 ];
