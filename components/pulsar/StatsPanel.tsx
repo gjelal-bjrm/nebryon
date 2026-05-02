@@ -141,7 +141,11 @@ function ColCard({
   const topFreqs = expanded ? (s.frequencies ?? []) : (s.frequencies ?? []).slice(0, 5);
   const maxCount = Math.max(...(s.frequencies ?? []).map(f => f.count), 1);
 
-  const activeBorder = borderColor ?? "var(--stroke)";
+  const activeBorder  = borderColor ?? (isSelected ? "var(--nebula)" : "var(--stroke)");
+  // background: tint with custom color if set, else fallback to type-based bg
+  const cardBg        = borderColor ? `${borderColor}18` : bg;
+  // glow color for selection outline
+  const glowHex       = borderColor ?? "#6C63FF";
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -150,27 +154,40 @@ function ColCard({
 
   return (
     <div ref={onRegisterRef} className="rounded-xl overflow-hidden"
-      style={{ border: `1.5px solid ${activeBorder}`, background: bg, transition: "border-color .2s" }}>
+      style={{
+        border:     `1.5px solid ${activeBorder}`,
+        background: cardBg,
+        transition: "border-color .25s, box-shadow .25s, background .25s",
+        boxShadow:  isSelected
+          ? `0 0 0 2.5px ${glowHex}55, 0 0 18px ${glowHex}35`
+          : "none",
+      }}>
 
-      {/* header */}
-      <div className="flex items-center gap-2 px-3 py-3">
+      {/* header — two rows when title is long */}
+      <div className="flex flex-wrap items-start gap-x-2 gap-y-1.5 px-3 py-3">
 
-        {/* checkbox */}
-        <button
-          onClick={onToggleSelect}
-          title={isSelected ? "Désélectionner" : "Sélectionner"}
-          className="shrink-0 transition hover:opacity-70 cursor-pointer"
-          style={{ color: isSelected ? "var(--nebula)" : "var(--muted)" }}>
-          {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
-        </button>
+        {/* first row: checkbox + icon + title */}
+        <div className="flex items-start gap-2 flex-1 min-w-0">
+          {/* checkbox */}
+          <button
+            onClick={onToggleSelect}
+            title={isSelected ? "Désélectionner" : "Sélectionner"}
+            className="shrink-0 mt-0.5 transition hover:opacity-70 cursor-pointer"
+            style={{ color: isSelected ? "var(--nebula)" : "var(--muted)" }}>
+            {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+          </button>
 
-        <span style={{ color: accent }}>{TYPE_ICON[s.type]}</span>
-        <span className="flex-1 min-w-0 text-xs font-semibold truncate" style={{ color: "var(--text)" }} title={s.header}>
-          {s.header}
-        </span>
-        <span className="text-[10px] shrink-0 rounded-full px-2 py-0.5" style={{ background: "rgba(255,255,255,.08)", color: "var(--muted)" }}>
-          {TYPE_LABEL_FR[s.type]}
-        </span>
+          <span className="shrink-0 mt-0.5" style={{ color: accent }}>{TYPE_ICON[s.type]}</span>
+          <span className="flex-1 min-w-0 text-xs font-semibold leading-snug" style={{ color: "var(--text)" }}>
+            {s.header}
+          </span>
+        </div>
+
+        {/* second row (right-aligned): type badge + palette + download */}
+        <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+          <span className="text-[10px] rounded-full px-2 py-0.5" style={{ background: "rgba(255,255,255,.08)", color: "var(--muted)" }}>
+            {TYPE_LABEL_FR[s.type]}
+          </span>
 
         {/* border color picker */}
         <div className="relative shrink-0">
@@ -244,7 +261,8 @@ function ColCard({
             ? <span className="block h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
             : <ImageDown size={13} />}
         </button>
-      </div>
+        </div>{/* end second row */}
+      </div>{/* end header */}
 
       {/* body */}
       <div className="px-4 pb-4 space-y-3">
