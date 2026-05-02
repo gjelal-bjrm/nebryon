@@ -325,7 +325,8 @@ function Stat({ label, value, sub, accent }: { label: string; value: string; sub
 export default function StatsPanel({ stats }: StatsPanelProps) {
   const [filter,   setFilter]   = useState<ColType | "all">("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulkDownloading, setBulkDownloading] = useState<"all" | "selection" | null>(null);
+  const [bulkDownloading,    setBulkDownloading]    = useState<"all" | "selection" | null>(null);
+  const [bulkColorPickerOpen, setBulkColorPickerOpen] = useState(false);
   const [cardColors, setCardColors] = useState<Map<string, string>>(new Map());
 
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -349,6 +350,19 @@ export default function StatsPanel({ stats }: StatsPanelProps) {
       return next;
     });
   }, []);
+
+  /* apply one colour to all selected cards */
+  const applyColorToSelection = useCallback((color: string | null) => {
+    setCardColors(prev => {
+      const next = new Map(prev);
+      selected.forEach(header => {
+        if (color) next.set(header, color);
+        else next.delete(header);
+      });
+      return next;
+    });
+    setBulkColorPickerOpen(false);
+  }, [selected]);
 
   const selectAll   = () => setSelected(new Set(filtered.map(s => s.header)));
   const deselectAll = () => setSelected(new Set());
@@ -415,6 +429,62 @@ export default function StatsPanel({ stats }: StatsPanelProps) {
             {allSelected ? <CheckSquare size={13} /> : <Square size={13} />}
             {allSelected ? "Tout désélectionner" : "Tout sélectionner"}
           </button>
+
+          {/* bulk colour picker */}
+          <div className="relative">
+            <button
+              onClick={() => setBulkColorPickerOpen(v => !v)}
+              disabled={selected.size === 0}
+              title={`Colorier les ${selected.size} carte${selected.size > 1 ? "s" : ""} sélectionnée${selected.size > 1 ? "s" : ""}`}
+              className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-80"
+              style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.04)", color: "var(--muted)" }}>
+              <Palette size={13} />
+              Colorier ({selected.size})
+            </button>
+
+            {bulkColorPickerOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setBulkColorPickerOpen(false)} />
+                <div
+                  className="absolute left-0 top-full z-50 mt-1.5 rounded-xl p-2.5 shadow-xl"
+                  style={{ border: "1px solid var(--stroke)", background: "var(--card)", minWidth: 172 }}>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--muted)" }}>
+                    Couleur des {selected.size} sélectionné{selected.size > 1 ? "s" : ""}
+                  </p>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {CARD_SWATCHES.map(sw => (
+                      <button
+                        key={sw.label}
+                        onClick={() => applyColorToSelection(sw.value)}
+                        title={sw.label}
+                        className="rounded-lg transition hover:scale-110 cursor-pointer"
+                        style={{
+                          width: 24, height: 24,
+                          background: sw.value ?? "var(--surface)",
+                          border: sw.value === null
+                            ? "1.5px dashed var(--stroke)"
+                            : `1.5px solid ${sw.value}`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  {/* custom colour input */}
+                  <div className="mt-2 pt-2" style={{ borderTop: "1px solid var(--stroke)" }}>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="color"
+                        defaultValue="#6C63FF"
+                        onChange={e => applyColorToSelection(e.target.value)}
+                        className="w-6 h-6 rounded cursor-pointer border-0 p-0"
+                        style={{ background: "none" }}
+                      />
+                      <span className="text-[10px]" style={{ color: "var(--muted)" }}>Couleur personnalisée</span>
+                    </label>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
 
           {/* download all */}
           <button
