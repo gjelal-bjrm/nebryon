@@ -4,7 +4,7 @@
 import { useState, useRef, useCallback } from "react";
 import {
   ChevronDown, Hash, AlignLeft, ToggleLeft, List, Calendar, Star, BarChart3,
-  Download, ImageDown, FolderArchive, CheckSquare, Square,
+  Download, ImageDown, FolderArchive, CheckSquare, Square, Palette,
 } from "lucide-react";
 import type { ColStats } from "../../lib/pulsar/stats";
 import type { ColType } from "../../lib/pulsar/typeDetector";
@@ -43,6 +43,20 @@ const TYPE_COLOR: Record<ColType, { bg: string; accent: string }> = {
   categorical: { bg: "rgba(108,99,255,.10)",  accent: "var(--nebula)" },
   text:        { bg: "rgba(160,174,192,.06)", accent: "var(--muted)" },
 };
+
+/* ── border color swatches ───────────────────────────────────────────────── */
+const CARD_SWATCHES: Array<{ label: string; value: string | null }> = [
+  { label: "Défaut",   value: null },
+  { label: "Violet",   value: "#6C63FF" },
+  { label: "Teal",     value: "#00C88A" },
+  { label: "Bleu",     value: "#63B3ED" },
+  { label: "Vert",     value: "#48BB78" },
+  { label: "Ambre",    value: "#F6AD55" },
+  { label: "Rouge",    value: "#FC8181" },
+  { label: "Rose",     value: "#F687B3" },
+  { label: "Or",       value: "#D4A84B" },
+  { label: "Blanc",    value: "#E2E8F0" },
+];
 
 /* ── helpers ─────────────────────────────────────────────────────────────── */
 function safeName(header: string): string {
@@ -109,20 +123,25 @@ function ScoreChart({ freqs, accent }: { freqs: { value: string; count: number; 
 
 /* ── single column card ──────────────────────────────────────────────────── */
 function ColCard({
-  s, isSelected, onToggleSelect, onRegisterRef, onDownload,
+  s, isSelected, borderColor, onToggleSelect, onRegisterRef, onDownload, onColorChange,
 }: {
-  s:             ColStats;
-  isSelected:    boolean;
+  s:              ColStats;
+  isSelected:     boolean;
+  borderColor:    string | null;
   onToggleSelect: () => void;
-  onRegisterRef: (el: HTMLDivElement | null) => void;
-  onDownload:    () => void;
+  onRegisterRef:  (el: HTMLDivElement | null) => void;
+  onDownload:     () => void;
+  onColorChange:  (color: string | null) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [downloading, setDownloading] = useState(false);
+  const [expanded,      setExpanded]      = useState(false);
+  const [downloading,   setDownloading]   = useState(false);
+  const [pickerOpen,    setPickerOpen]    = useState(false);
   const { bg, accent } = TYPE_COLOR[s.type];
   const hasFreqs = (s.frequencies?.length ?? 0) > 0;
   const topFreqs = expanded ? (s.frequencies ?? []) : (s.frequencies ?? []).slice(0, 5);
   const maxCount = Math.max(...(s.frequencies ?? []).map(f => f.count), 1);
+
+  const activeBorder = borderColor ?? "var(--stroke)";
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -130,11 +149,18 @@ function ColCard({
   };
 
   return (
-    <div ref={onRegisterRef} className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--stroke)", background: bg }}>
+    <div ref={onRegisterRef} className="rounded-xl overflow-hidden"
+      style={{ border: `1.5px solid ${activeBorder}`, background: bg, transition: "border-color .2s" }}>
+
       {/* header */}
       <div className="flex items-center gap-2 px-3 py-3">
+
         {/* checkbox */}
-        <button onClick={onToggleSelect} className="shrink-0 transition hover:opacity-70" style={{ color: isSelected ? "var(--nebula)" : "var(--muted)" }}>
+        <button
+          onClick={onToggleSelect}
+          title={isSelected ? "Désélectionner" : "Sélectionner"}
+          className="shrink-0 transition hover:opacity-70 cursor-pointer"
+          style={{ color: isSelected ? "var(--nebula)" : "var(--muted)" }}>
           {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
         </button>
 
@@ -146,14 +172,77 @@ function ColCard({
           {TYPE_LABEL_FR[s.type]}
         </span>
 
+        {/* border color picker */}
+        <div className="relative shrink-0">
+          <button
+            onClick={() => setPickerOpen(v => !v)}
+            title="Changer la couleur du cadre"
+            className="shrink-0 rounded-lg p-1 transition hover:opacity-80 cursor-pointer"
+            style={{
+              color: borderColor ?? "var(--muted)",
+              border: "1px solid rgba(255,255,255,.1)",
+              background: borderColor ? `${borderColor}22` : "transparent",
+            }}>
+            <Palette size={13} />
+          </button>
+
+          {pickerOpen && (
+            <>
+              {/* invisible backdrop to close picker */}
+              <div className="fixed inset-0 z-40" onClick={() => setPickerOpen(false)} />
+              <div
+                className="absolute right-0 top-full z-50 mt-1.5 rounded-xl p-2.5 shadow-xl"
+                style={{ border: "1px solid var(--stroke)", background: "var(--card)", minWidth: 160 }}>
+                <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--muted)" }}>
+                  Couleur du cadre
+                </p>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {CARD_SWATCHES.map(sw => (
+                    <button
+                      key={sw.label}
+                      onClick={() => { onColorChange(sw.value); setPickerOpen(false); }}
+                      title={sw.label}
+                      className="rounded-lg transition hover:scale-110 cursor-pointer"
+                      style={{
+                        width: 24, height: 24,
+                        background: sw.value ?? "var(--surface)",
+                        border: sw.value === null
+                          ? "1.5px dashed var(--stroke)"
+                          : (borderColor === sw.value ? "2px solid white" : `1.5px solid ${sw.value}`),
+                        outline: (sw.value === null && borderColor === null) ? "2px solid var(--nebula)" : "none",
+                        outlineOffset: 1,
+                      }}
+                    />
+                  ))}
+                </div>
+                {/* native color input for fully custom color */}
+                <div className="mt-2 pt-2" style={{ borderTop: "1px solid var(--stroke)" }}>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="color"
+                      defaultValue={borderColor ?? "#6C63FF"}
+                      onChange={e => onColorChange(e.target.value)}
+                      className="w-6 h-6 rounded cursor-pointer border-0 p-0"
+                      style={{ background: "none" }}
+                    />
+                    <span className="text-[10px]" style={{ color: "var(--muted)" }}>Couleur personnalisée</span>
+                  </label>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
         {/* download PNG button */}
         <button
           onClick={handleDownload}
           disabled={downloading}
           title="Télécharger en PNG"
-          className="shrink-0 rounded-lg p-1 transition hover:opacity-80 disabled:opacity-40"
+          className="shrink-0 rounded-lg p-1 transition hover:opacity-80 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
           style={{ color: accent, border: "1px solid rgba(255,255,255,.1)" }}>
-          {downloading ? <span className="block h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" /> : <ImageDown size={13} />}
+          {downloading
+            ? <span className="block h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
+            : <ImageDown size={13} />}
         </button>
       </div>
 
@@ -185,7 +274,7 @@ function ColCard({
             {topFreqs.map(f => <FreqBar key={f.value} item={f} max={maxCount} accent={accent} />)}
             {(s.frequencies?.length ?? 0) > 5 && (
               <button onClick={() => setExpanded(v => !v)}
-                className="flex items-center gap-1 mt-1 text-[11px] transition hover:opacity-80" style={{ color: accent }}>
+                className="flex items-center gap-1 mt-1 text-[11px] transition hover:opacity-80 cursor-pointer" style={{ color: accent }}>
                 <ChevronDown size={11} style={{ transform: expanded ? "rotate(180deg)" : undefined, transition: "transform .2s" }} />
                 {expanded ? "Voir moins" : `Voir ${s.frequencies!.length - 5} de plus`}
               </button>
@@ -219,6 +308,7 @@ export default function StatsPanel({ stats }: StatsPanelProps) {
   const [filter,   setFilter]   = useState<ColType | "all">("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDownloading, setBulkDownloading] = useState<"all" | "selection" | null>(null);
+  const [cardColors, setCardColors] = useState<Map<string, string>>(new Map());
 
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
@@ -233,7 +323,16 @@ export default function StatsPanel({ stats }: StatsPanelProps) {
     });
   }, []);
 
-  const selectAll  = () => setSelected(new Set(filtered.map(s => s.header)));
+  const setCardColor = useCallback((header: string, color: string | null) => {
+    setCardColors(prev => {
+      const next = new Map(prev);
+      if (color) next.set(header, color);
+      else next.delete(header);
+      return next;
+    });
+  }, []);
+
+  const selectAll   = () => setSelected(new Set(filtered.map(s => s.header)));
   const deselectAll = () => setSelected(new Set());
   const allSelected = filtered.length > 0 && filtered.every(s => selected.has(s.header));
 
@@ -278,7 +377,7 @@ export default function StatsPanel({ stats }: StatsPanelProps) {
             const label = t === "all" ? `Tout (${cnt})` : `${TYPE_LABEL_FR[t]} (${cnt})`;
             return (
               <button key={t} onClick={() => setFilter(t)}
-                className="rounded-full px-3 py-1 text-[11px] transition"
+                className="rounded-full px-3 py-1 text-[11px] transition cursor-pointer"
                 style={filter === t
                   ? { background: "var(--nebula)", color: "#fff", border: "1px solid var(--nebula)" }
                   : { border: "1px solid var(--stroke)", background: "rgba(255,255,255,.04)", color: "var(--muted)" }}>
@@ -293,7 +392,7 @@ export default function StatsPanel({ stats }: StatsPanelProps) {
           {/* select all toggle */}
           <button
             onClick={allSelected ? deselectAll : selectAll}
-            className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs transition"
+            className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs transition cursor-pointer hover:opacity-80"
             style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.04)", color: "var(--muted)" }}>
             {allSelected ? <CheckSquare size={13} /> : <Square size={13} />}
             {allSelected ? "Tout désélectionner" : "Tout sélectionner"}
@@ -303,7 +402,7 @@ export default function StatsPanel({ stats }: StatsPanelProps) {
           <button
             onClick={handleDownloadAll}
             disabled={bulkDownloading !== null}
-            className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs transition disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs transition disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed hover:opacity-80"
             style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.04)", color: "var(--text)" }}
             title="Télécharger toutes les catégories (ZIP)">
             {bulkDownloading === "all"
@@ -316,7 +415,7 @@ export default function StatsPanel({ stats }: StatsPanelProps) {
           <button
             onClick={handleDownloadSelection}
             disabled={selected.size === 0 || bulkDownloading !== null}
-            className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs transition disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs transition disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed hover:opacity-80"
             style={{ border: "1px solid var(--nebula)", background: "rgba(108,99,255,.12)", color: "var(--halo)" }}
             title={`Télécharger ${selected.size} carte${selected.size > 1 ? "s" : ""} sélectionnée${selected.size > 1 ? "s" : ""}`}>
             {bulkDownloading === "selection"
@@ -334,6 +433,7 @@ export default function StatsPanel({ stats }: StatsPanelProps) {
             key={s.header}
             s={s}
             isSelected={selected.has(s.header)}
+            borderColor={cardColors.get(s.header) ?? null}
             onToggleSelect={() => toggleSelect(s.header)}
             onRegisterRef={el => {
               if (el) cardRefs.current.set(s.header, el);
@@ -343,6 +443,7 @@ export default function StatsPanel({ stats }: StatsPanelProps) {
               const el = cardRefs.current.get(s.header);
               if (el) await downloadSinglePng(el, `${safeName(s.header)}.png`);
             }}
+            onColorChange={color => setCardColor(s.header, color)}
           />
         ))}
       </div>

@@ -4,7 +4,7 @@
 import { useState, useMemo, useCallback } from "react";
 import {
   ChevronUp, ChevronDown, ChevronsUpDown, Download,
-  Search, Columns3, X, Plus, SlidersHorizontal,
+  Search, Columns3, X, Plus, SlidersHorizontal, HelpCircle,
 } from "lucide-react";
 import type { ColType } from "../../lib/pulsar/typeDetector";
 
@@ -57,6 +57,16 @@ const TYPE_LABEL: Record<ColType, string> = {
   text:        "texte",
 };
 
+/* ── tips content ─────────────────────────────────────────────────────────── */
+const TIPS = [
+  { op: "contient",           example: '"ali"',        note: 'Alice, Alicia, Malika…' },
+  { op: "est égal à",         example: '"25"',         note: 'correspondance exacte (insensible à la casse)' },
+  { op: "commence par",       example: '"B"',          note: 'Bob, Baptiste, Bruno…' },
+  { op: "se termine par",     example: '"son"',        note: 'Jackson, Harrison…' },
+  { op: "est vide",           example: null,           note: 'pas de valeur à saisir' },
+  { op: "n'est pas vide",     example: null,           note: 'pas de valeur à saisir' },
+];
+
 /* ── CSV / JSON export ────────────────────────────────────────────────────── */
 function exportData(rows: Record<string, string>[], headers: string[], fmt: "csv" | "json") {
   let content: string, mime: string, ext: string;
@@ -92,6 +102,7 @@ export default function DataTable({ headers, rows, types }: DataTableProps) {
   const [searchMode, setSearchMode] = useState<SearchMode>("simple");
   const [conditions, setConditions] = useState<Condition[]>([newCondition(headers[0] ?? "")]);
   const [condLogic,  setCondLogic]  = useState<LogicOp>("AND");
+  const [showTips,   setShowTips]   = useState(false);
 
   const handleSort = useCallback((col: string) => {
     if (sortCol !== col) { setSortCol(col); setSortDir("asc"); }
@@ -175,14 +186,14 @@ export default function DataTable({ headers, rows, types }: DataTableProps) {
               className="w-full rounded-xl pl-8 pr-3 py-2 text-xs focus:outline-none"
               style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.04)", color: "var(--text)" }}
             />
-            {search && <button onClick={() => { setSearch(""); setPage(1); }} className="absolute right-2.5 top-1/2 -translate-y-1/2" style={{ color: "var(--muted)" }}><X size={12} /></button>}
+            {search && <button onClick={() => { setSearch(""); setPage(1); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 cursor-pointer" style={{ color: "var(--muted)" }}><X size={12} /></button>}
           </div>
         )}
 
         {/* advanced toggle */}
         <button
           onClick={() => { setSearchMode(m => m === "simple" ? "advanced" : "simple"); setPage(1); }}
-          className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs transition"
+          className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs transition cursor-pointer"
           style={searchMode === "advanced"
             ? { border: "1px solid var(--nebula)", background: "rgba(108,99,255,.15)", color: "var(--halo)" }
             : { border: "1px solid var(--stroke)", background: "rgba(255,255,255,.04)", color: "var(--muted)" }}>
@@ -193,47 +204,53 @@ export default function DataTable({ headers, rows, types }: DataTableProps) {
         {/* column picker */}
         <div className="relative">
           <button onClick={() => setColPickerOpen(v => !v)}
-            className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs transition"
+            className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs transition cursor-pointer"
             style={{ border: "1px solid var(--stroke)", background: "rgba(255,255,255,.04)", color: "var(--text)" }}>
             <Columns3 size={13} /> Colonnes ({visibleCols.size}/{headers.length})
           </button>
           {colPickerOpen && (
-            <div className="absolute right-0 top-full z-50 mt-1 rounded-xl p-3 shadow-xl w-64 max-h-80 overflow-y-auto"
-              style={{ border: "1px solid var(--stroke)", background: "var(--card)" }}>
-              <div className="flex justify-between mb-2">
-                <button className="text-[10px] underline" style={{ color: "var(--nebula)" }} onClick={() => setVisible(new Set(headers))}>Tout sélectionner</button>
-                <button className="text-[10px] underline" style={{ color: "var(--muted)" }} onClick={() => setVisible(new Set())}>Tout désélectionner</button>
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setColPickerOpen(false)} />
+              <div className="absolute right-0 top-full z-50 mt-1 rounded-xl p-3 shadow-xl w-64 max-h-80 overflow-y-auto"
+                style={{ border: "1px solid var(--stroke)", background: "var(--card)" }}>
+                <div className="flex justify-between mb-2">
+                  <button className="text-[10px] underline cursor-pointer" style={{ color: "var(--nebula)" }} onClick={() => setVisible(new Set(headers))}>Tout sélectionner</button>
+                  <button className="text-[10px] underline cursor-pointer" style={{ color: "var(--muted)" }} onClick={() => setVisible(new Set())}>Tout désélectionner</button>
+                </div>
+                {headers.map(h => (
+                  <label key={h} className="flex items-center gap-2 py-0.5 cursor-pointer text-xs" style={{ color: "var(--text)" }}>
+                    <input type="checkbox" checked={visibleCols.has(h)} onChange={e => { const s = new Set(visibleCols); e.target.checked ? s.add(h) : s.delete(h); setVisible(s); }} className="accent-[var(--nebula)]" />
+                    <span className="truncate" title={h}>{h}</span>
+                  </label>
+                ))}
               </div>
-              {headers.map(h => (
-                <label key={h} className="flex items-center gap-2 py-0.5 cursor-pointer text-xs" style={{ color: "var(--text)" }}>
-                  <input type="checkbox" checked={visibleCols.has(h)} onChange={e => { const s = new Set(visibleCols); e.target.checked ? s.add(h) : s.delete(h); setVisible(s); }} className="accent-[var(--nebula)]" />
-                  <span className="truncate" title={h}>{h}</span>
-                </label>
-              ))}
-            </div>
+            </>
           )}
         </div>
 
         {/* export */}
         <div className="relative">
           <button onClick={() => setExportOpen(v => !v)}
-            className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs transition"
+            className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs transition cursor-pointer"
             style={{ border: "1px solid var(--nebula)", background: "rgba(108,99,255,.12)", color: "var(--halo)" }}>
             <Download size={13} /> Exporter
           </button>
           {exportOpen && (
-            <div className="absolute right-0 top-full z-50 mt-1 rounded-xl overflow-hidden shadow-xl w-44"
-              style={{ border: "1px solid var(--stroke)", background: "var(--card)" }}>
-              {(["csv", "json"] as const).map(fmt => (
-                <button key={fmt} onClick={() => { exportData(processed, visHeaders, fmt); setExportOpen(false); }}
-                  className="flex w-full items-center gap-2 px-4 py-2.5 text-xs hover:opacity-80 transition" style={{ color: "var(--text)" }}>
-                  <Download size={12} /> Exporter en {fmt.toUpperCase()}
-                </button>
-              ))}
-              <div className="px-4 py-2 text-[10px]" style={{ color: "var(--muted)", borderTop: "1px solid var(--stroke)" }}>
-                {processed.length} ligne{processed.length > 1 ? "s" : ""} · {visHeaders.length} col.
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setExportOpen(false)} />
+              <div className="absolute right-0 top-full z-50 mt-1 rounded-xl overflow-hidden shadow-xl w-44"
+                style={{ border: "1px solid var(--stroke)", background: "var(--card)" }}>
+                {(["csv", "json"] as const).map(fmt => (
+                  <button key={fmt} onClick={() => { exportData(processed, visHeaders, fmt); setExportOpen(false); }}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-xs hover:opacity-80 transition cursor-pointer" style={{ color: "var(--text)" }}>
+                    <Download size={12} /> Exporter en {fmt.toUpperCase()}
+                  </button>
+                ))}
+                <div className="px-4 py-2 text-[10px]" style={{ color: "var(--muted)", borderTop: "1px solid var(--stroke)" }}>
+                  {processed.length} ligne{processed.length > 1 ? "s" : ""} · {visHeaders.length} col.
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>
@@ -253,7 +270,7 @@ export default function DataTable({ headers, rows, types }: DataTableProps) {
               <select
                 value={cond.column}
                 onChange={e => updateCondition(cond.id, { column: e.target.value })}
-                className="rounded-lg px-2 py-1.5 text-xs focus:outline-none max-w-[180px]"
+                className="rounded-lg px-2 py-1.5 text-xs focus:outline-none max-w-[180px] cursor-pointer"
                 style={{ border: "1px solid var(--stroke)", background: "var(--surface)", color: "var(--text)" }}>
                 {headers.map(h => <option key={h} value={h}>{h.length > 28 ? h.slice(0, 28) + "…" : h}</option>)}
               </select>
@@ -261,7 +278,7 @@ export default function DataTable({ headers, rows, types }: DataTableProps) {
               <select
                 value={cond.operator}
                 onChange={e => updateCondition(cond.id, { operator: e.target.value as Operator })}
-                className="rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                className="rounded-lg px-2 py-1.5 text-xs focus:outline-none cursor-pointer"
                 style={{ border: "1px solid var(--stroke)", background: "var(--surface)", color: "var(--text)" }}>
                 {(Object.entries(OP_LABELS) as [Operator, string][]).map(([op, label]) => (
                   <option key={op} value={op}>{label}</option>
@@ -280,7 +297,7 @@ export default function DataTable({ headers, rows, types }: DataTableProps) {
               {/* Remove */}
               {conditions.length > 1 && (
                 <button onClick={() => { removeCondition(cond.id); setPage(1); }}
-                  className="rounded-lg p-1.5 transition hover:opacity-70" style={{ color: "var(--muted)" }}>
+                  className="rounded-lg p-1.5 transition hover:opacity-70 cursor-pointer" style={{ color: "var(--muted)" }}>
                   <X size={12} />
                 </button>
               )}
@@ -290,7 +307,7 @@ export default function DataTable({ headers, rows, types }: DataTableProps) {
           {/* Footer: add condition + logic toggle */}
           <div className="flex items-center gap-3 pt-1">
             <button onClick={addCondition}
-              className="flex items-center gap-1 text-[11px] transition hover:opacity-80"
+              className="flex items-center gap-1 text-[11px] transition hover:opacity-80 cursor-pointer"
               style={{ color: "var(--nebula)" }}>
               <Plus size={11} /> Ajouter une condition
             </button>
@@ -298,7 +315,7 @@ export default function DataTable({ headers, rows, types }: DataTableProps) {
               <span className="text-[10px]" style={{ color: "var(--muted)" }}>Logique :</span>
               {(["AND", "OR"] as LogicOp[]).map(op => (
                 <button key={op} onClick={() => { setCondLogic(op); setPage(1); }}
-                  className="rounded-lg px-2 py-0.5 text-[11px] font-bold transition"
+                  className="rounded-lg px-2 py-0.5 text-[11px] font-bold transition cursor-pointer"
                   style={condLogic === op
                     ? { background: "var(--nebula)", color: "#fff", border: "1px solid var(--nebula)" }
                     : { border: "1px solid var(--stroke)", color: "var(--muted)" }}>
@@ -306,6 +323,75 @@ export default function DataTable({ headers, rows, types }: DataTableProps) {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Tips toggle */}
+          <div style={{ borderTop: "1px solid var(--stroke)", paddingTop: "8px" }}>
+            <button
+              onClick={() => setShowTips(v => !v)}
+              className="flex items-center gap-1.5 text-[11px] transition hover:opacity-80 cursor-pointer"
+              style={{ color: "var(--muted)" }}>
+              <HelpCircle size={12} />
+              Conseils &amp; exemples
+              <ChevronDown size={10} style={{ transform: showTips ? "rotate(180deg)" : undefined, transition: "transform .2s" }} />
+            </button>
+
+            {showTips && (
+              <div className="mt-2 rounded-xl p-3 space-y-3" style={{ background: "rgba(255,255,255,.03)", border: "1px solid var(--stroke)" }}>
+
+                {/* operators table */}
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--muted)" }}>Opérateurs disponibles</p>
+                  <div className="space-y-1">
+                    {TIPS.map(tip => (
+                      <div key={tip.op} className="flex items-baseline gap-2 text-[11px]">
+                        <span className="shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold"
+                          style={{ background: "rgba(108,99,255,.15)", color: "var(--halo)" }}>
+                          {tip.op}
+                        </span>
+                        {tip.example && (
+                          <span className="shrink-0 font-mono text-[10px]" style={{ color: "var(--nebula)" }}>
+                            {tip.example}
+                          </span>
+                        )}
+                        <span style={{ color: "var(--muted)" }}>— {tip.note}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* AND / OR */}
+                <div style={{ borderTop: "1px solid var(--stroke)", paddingTop: "8px" }}>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--muted)" }}>Logique AND / OR</p>
+                  <div className="space-y-0.5 text-[11px]">
+                    <p><span className="font-bold" style={{ color: "var(--halo)" }}>AND</span> <span style={{ color: "var(--muted)" }}>— toutes les conditions doivent être vraies</span></p>
+                    <p><span className="font-bold" style={{ color: "var(--halo)" }}>OR</span>  <span style={{ color: "var(--muted)" }}>— au moins une condition doit être vraie</span></p>
+                  </div>
+                </div>
+
+                {/* example */}
+                <div style={{ borderTop: "1px solid var(--stroke)", paddingTop: "8px" }}>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--muted)" }}>Exemple</p>
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                    <span className="rounded px-1.5 py-0.5 font-mono text-[10px]" style={{ background: "rgba(255,255,255,.07)", color: "var(--text)" }}>Prénom</span>
+                    <span style={{ color: "var(--muted)" }}>contient</span>
+                    <span className="rounded px-1.5 py-0.5 font-mono text-[10px]" style={{ background: "rgba(108,99,255,.15)", color: "var(--nebula)" }}>&quot;ali&quot;</span>
+                    <span className="rounded px-1 py-0.5 text-[10px] font-bold" style={{ background: "rgba(108,99,255,.15)", color: "var(--halo)" }}>AND</span>
+                    <span className="rounded px-1.5 py-0.5 font-mono text-[10px]" style={{ background: "rgba(255,255,255,.07)", color: "var(--text)" }}>Note</span>
+                    <span style={{ color: "var(--muted)" }}>est égal à</span>
+                    <span className="rounded px-1.5 py-0.5 font-mono text-[10px]" style={{ background: "rgba(108,99,255,.15)", color: "var(--nebula)" }}>&quot;5&quot;</span>
+                  </div>
+                  <p className="mt-1 text-[10px]" style={{ color: "var(--muted)" }}>
+                    → toutes les lignes dont le Prénom contient &ldquo;ali&rdquo; <em>et</em> dont la Note est exactement &ldquo;5&rdquo;
+                  </p>
+                </div>
+
+                {/* case note */}
+                <p className="text-[10px]" style={{ color: "var(--muted)", borderTop: "1px solid var(--stroke)", paddingTop: "8px" }}>
+                  ℹ️ La recherche est insensible à la casse — <em>Ali</em>, <em>ALI</em> et <em>ali</em> donnent le même résultat.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -394,7 +480,7 @@ export default function DataTable({ headers, rows, types }: DataTableProps) {
 function PagBtn({ children, onClick, disabled, active }: { children: React.ReactNode; onClick: () => void; disabled?: boolean; active?: boolean }) {
   return (
     <button onClick={onClick} disabled={disabled}
-      className="rounded-lg px-2.5 py-1 text-xs transition disabled:opacity-30"
+      className="rounded-lg px-2.5 py-1 text-xs transition disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
       style={active
         ? { background: "var(--nebula)", color: "#fff", border: "1px solid var(--nebula)" }
         : { border: "1px solid var(--stroke)", background: "rgba(255,255,255,.04)", color: "var(--text)" }}>
