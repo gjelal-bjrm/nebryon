@@ -6,25 +6,10 @@ import { Sun, Moon, User } from "lucide-react";
 import { db } from "@/lib/orbit/db";
 import { NAV } from "@/lib/shared/nav";
 import GreetingClock from "@/components/GreetingClock";
+import PulsarLogo from "./PulsarLogo";
 
 interface Props {
   onOpenProfile: () => void;
-}
-
-/* ── Pulsar logo — pulsating rings ────────────────────────────────────────── */
-function PulsarLogo({ size = 26 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 26 26" fill="none">
-      {/* outer ring */}
-      <circle cx="13" cy="13" r="11" stroke="#9F7AEA" strokeWidth="1.2" opacity="0.5" />
-      {/* mid ring */}
-      <circle cx="13" cy="13" r="7"  stroke="#9F7AEA" strokeWidth="1"   opacity="0.7" />
-      {/* core dot */}
-      <circle cx="13" cy="13" r="3"  fill="#9F7AEA" />
-      {/* signal line */}
-      <path d="M3 13 h4 l2 -4 l2 8 l2 -4 h10" stroke="#9F7AEA" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
-    </svg>
-  );
 }
 
 export default function PulsarTopbar({ onOpenProfile }: Props) {
@@ -62,12 +47,12 @@ export default function PulsarTopbar({ onOpenProfile }: Props) {
       {/* Left — logo + title */}
       <div className="flex items-center gap-2">
         <a href="/" className="flex items-center justify-center transition hover:opacity-80" title="Retour à l'accueil">
-          <PulsarLogo size={26} />
+          <PulsarLogo size={28} />
         </a>
         <span
           className="text-xs font-bold tracking-widest select-none"
           style={{
-            background: "linear-gradient(90deg, #9F7AEA 0%, #6C63FF 50%, #B794F4 100%)",
+            background: "linear-gradient(90deg, #00C88A 0%, #7FFFD4 50%, #00E5A0 100%)",
             WebkitBackgroundClip: "text",
             WebkitTextFillColor: "transparent",
             backgroundClip: "text",
