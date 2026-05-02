@@ -70,12 +70,37 @@ function safeName(header: string): string {
 
 /**
  * Capture an element as PNG.
- * No backgroundColor passed → canvas corners stay transparent
- * so the element's own border-radius produces rounded corners in the output.
+ * Clones the element directly into document.body so that parent transforms,
+ * stacking contexts or overflow:hidden can't prevent the browser from
+ * painting it. The clone sits at opacity:0.01 (invisible) while the capture
+ * overrides opacity to 1. No backgroundColor → transparent corners from
+ * the element's own border-radius + overflow:hidden.
  */
 async function cardToPng(el: HTMLElement): Promise<string> {
   const { toPng } = await import("html-to-image");
-  return toPng(el, { pixelRatio: 2, cacheBust: true });
+
+  const clone = el.cloneNode(true) as HTMLElement;
+  clone.style.display      = "block";
+  clone.style.position     = "fixed";
+  clone.style.left         = "0";
+  clone.style.top          = "0";
+  clone.style.zIndex       = "99999";
+  clone.style.opacity      = "0.01";  // nearly invisible → no visible flash
+  clone.style.pointerEvents = "none";
+  document.body.appendChild(clone);
+
+  // Two frames: let browser lay out + paint the clone
+  await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+
+  try {
+    return await toPng(clone, {
+      pixelRatio: 2,
+      cacheBust:  true,
+      style:      { opacity: "1" }, // override the 0.01 opacity for the capture
+    });
+  } finally {
+    document.body.removeChild(clone);
+  }
 }
 
 async function downloadSinglePng(el: HTMLElement, filename: string) {
@@ -195,10 +220,12 @@ function ColCard({
   const cardBg       = borderColor ? `${borderColor}18` : bg;
   const glowHex      = borderColor ?? "#6C63FF";
 
-  // Export colours — resolved, no CSS vars
+  // Export colours — fully resolved hex, no CSS vars
   const exportAccent  = accent.startsWith("var") ? "#6C63FF" : accent;
-  const exportBorder  = borderColor ?? "#6C63FF";
-  const exportBgFinal = borderColor ? `${borderColor}28` : solidBg;
+  // Preserve the user's custom colour; fall back to the type accent colour
+  const exportBorder  = borderColor ?? exportAccent;
+  // Always use the opaque solidBg so the PNG is never semi-transparent
+  const exportBgFinal = solidBg;
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -360,23 +387,20 @@ function ColCard({
         </div>
       </div>
 
-      {/* ── Off-screen export div (captured for PNG) ──────────────────────── */}
-      {/* Uses inline styles only + resolved colors — no Tailwind, no CSS vars */}
+      {/* ── Export div (hidden, cloned to body on download) ─────────────── */}
+      {/* display:none keeps it out of flow; cardToPng clones to document.body */}
+      {/* Uses inline styles + resolved hex colours only — no Tailwind/CSS vars */}
       <div
         ref={onRegisterExportRef}
         aria-hidden="true"
         style={{
-          position:     "fixed",
-          left:         "-9999px",
-          top:          0,
+          display:      "none",
           width:        "560px",
           background:   exportBgFinal,
-          border:       `2px solid ${exportBorder}`,
+          border:       `2.5px solid ${exportBorder}`,
           borderRadius: "16px",
           overflow:     "hidden",
           fontFamily:   "inherit",
-          pointerEvents:"none",
-          zIndex:       -1,
         }}
       >
         {/* export header: icon + clean title (no number prefix) */}
