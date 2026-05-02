@@ -9,6 +9,7 @@ import { db } from "@/lib/orbit/db";
 import { NAV } from "@/lib/shared/nav";
 import type { NavItem } from "@/lib/shared/nav";
 import GreetingClock from "@/components/GreetingClock";
+import NebryonPlanetO from "@/components/NebryonPlanetO";
 
 const ProfileEditor = dynamic(() => import("@/components/orbit/ProfileEditor"), { ssr: false });
 
@@ -132,7 +133,7 @@ export default function Navbar() {
           <a href="/" className="flex items-center gap-3 no-underline">
             <NebryonLogo size={32} />
             <span style={{ fontWeight: 800, fontSize: "1.2rem", color: "var(--text)", letterSpacing: ".5px", transition: "color 0.3s ease" }}>
-              <span style={{ color: "var(--nebula)" }}>Nebr</span>yon
+              <span style={{ color: "var(--nebula)" }}>Nebr</span>y<NebryonPlanetO />n
             </span>
           </a>
 
