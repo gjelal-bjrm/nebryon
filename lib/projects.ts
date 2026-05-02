@@ -4,6 +4,8 @@ export interface Project {
   href: string;
   tags: string[];
   type: "showcase" | "app";
+  /** "mobile" = application mobile, non accessible directement depuis le Hub */
+  platform?: "web" | "mobile";
 }
 
 export const projects: Project[] = [
@@ -14,6 +16,7 @@ export const projects: Project[] = [
     href: "/projects/lisan",
     tags: ["React Native", "Expo", "TypeScript", "SQLite"],
     type: "showcase",
+    platform: "mobile",
   },
   {
     title: "Nebryon Orbit",

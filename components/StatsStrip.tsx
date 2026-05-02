@@ -25,10 +25,10 @@ function Counter({ to, suffix }: { to: number; suffix: string }) {
 
 /* ── Stats ───────────────────────────────────────────────── */
 const STATS = [
-  { to: 1,   suffix: "",    label: "module disponible"   },
+  { to: 2,   suffix: "",    label: "modules disponibles" },
+  { to: 1,   suffix: "",    label: "projet externe"      },
   { to: 15,  suffix: "",    label: "outils disponibles"  },
   { to: 100, suffix: " %",  label: "traitement local"    },
-  { to: 0,   suffix: "",    label: "donnée transmise"    },
 ];
 
 /* ── Scrolling pills ─────────────────────────────────────── */
@@ -36,6 +36,7 @@ const PILLS = [
   "Image Resizer", "Fusionner PDF", "QR Code", "Mots de passe",
   "Extraire pages", "Convertir images", "Calculateur dates",
   "Base64", "Inspecteur fichier", "Horloge", "Comparateur texte", "Lorem Ipsum", "Générateur CV",
+  "Orbit", "Pulsar",
 ];
 
 export default function StatsStrip() {
