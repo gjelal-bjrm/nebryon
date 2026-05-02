@@ -69,6 +69,20 @@ function safeName(header: string): string {
 }
 
 /**
+ * Blend a 6-digit hex colour at `alpha` opacity over a fixed dark base.
+ * Returns an opaque `rgb(r,g,b)` string so all card types look consistent
+ * when the same custom border colour is applied.
+ * Base ≈ #0d1120 (neutral very-dark navy).
+ */
+function blendOnDark(hex: string, alpha = 0.18): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const [br, bg, bb] = [13, 17, 32]; // base dark navy
+  return `rgb(${Math.round(r * alpha + br * (1 - alpha))},${Math.round(g * alpha + bg * (1 - alpha))},${Math.round(b * alpha + bb * (1 - alpha))})`;
+}
+
+/**
  * Capture an element as PNG.
  * Clones the element directly into document.body so that parent transforms,
  * stacking contexts or overflow:hidden can't prevent the browser from
@@ -224,8 +238,10 @@ function ColCard({
   const exportAccent  = accent.startsWith("var") ? "#6C63FF" : accent;
   // Preserve the user's custom colour; fall back to the type accent colour
   const exportBorder  = borderColor ?? exportAccent;
-  // Always use the opaque solidBg so the PNG is never semi-transparent
-  const exportBgFinal = solidBg;
+  // If a custom colour is set: blend it on a neutral dark base so ALL card
+  // types look visually consistent when the same colour is applied.
+  // No custom colour: fall back to the type-specific solid background.
+  const exportBgFinal = borderColor ? blendOnDark(borderColor, 0.18) : solidBg;
 
   const handleDownload = async () => {
     setDownloading(true);
