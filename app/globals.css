@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  --font-family-sans: var(--font-syne), system-ui, -apple-system, sans-serif;
+  --font-family-sans: var(--font-jakarta), system-ui, -apple-system, sans-serif;
 }
 
 /* ── DARK (default) ── */

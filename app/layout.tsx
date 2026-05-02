@@ -1,14 +1,14 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { Syne } from "next/font/google";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import ConditionalNavbar from "@/components/ConditionalNavbar";
 import WelcomeSetupLoader from "@/components/WelcomeSetupLoader";
 import BirthdayBannerLoader from "@/components/BirthdayBannerLoader";
 
-const syne = Syne({
+const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-syne",
+  variable: "--font-jakarta",
   display: "swap",
 });
 
@@ -19,8 +19,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fr" className={syne.variable}>
-      <body className={`${syne.className} min-h-screen antialiased`}>
+    <html lang="fr" className={jakarta.variable}>
+      <body className={`${jakarta.className} min-h-screen antialiased`}>
         <BirthdayBannerLoader />
         <ConditionalNavbar />
         <WelcomeSetupLoader />
