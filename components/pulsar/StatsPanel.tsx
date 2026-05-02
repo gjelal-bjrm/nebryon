@@ -68,18 +68,32 @@ function safeName(header: string): string {
   return header.slice(0, 40).replace(/[^a-z0-9]/gi, "_").replace(/_+/g, "_").replace(/^_|_$/g, "") || "col";
 }
 
+/** Parse any css color (hex6, rgb, rgba) into [r,g,b]. */
+function parseRgb(color: string): [number, number, number] {
+  const s = color.trim();
+  if (s.startsWith("#") && s.length >= 7) {
+    return [parseInt(s.slice(1,3),16), parseInt(s.slice(3,5),16), parseInt(s.slice(5,7),16)];
+  }
+  const m = s.match(/\d+(\.\d+)?/g);
+  if (m && m.length >= 3) return [+m[0], +m[1], +m[2]];
+  return [13, 17, 32]; // safe dark fallback
+}
+
+/** True when the background colour is perceived as light (luminance > 128). */
+function isLightBg(rgb: [number, number, number]): boolean {
+  return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2] > 128;
+}
+
 /**
- * Blend a 6-digit hex colour at `alpha` opacity over a fixed dark base.
- * Returns an opaque `rgb(r,g,b)` string so all card types look consistent
- * when the same custom border colour is applied.
- * Base ≈ #0d1120 (neutral very-dark navy).
+ * Blend a 6-digit hex colour at `alpha` opacity over an [r,g,b] base.
+ * Produces an opaque rgb() that looks like the transparent CSS overlay.
  */
-function blendOnDark(hex: string, alpha = 0.18): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  const [br, bg, bb] = [13, 17, 32]; // base dark navy
-  return `rgb(${Math.round(r * alpha + br * (1 - alpha))},${Math.round(g * alpha + bg * (1 - alpha))},${Math.round(b * alpha + bb * (1 - alpha))})`;
+function blendOnBase(hex: string, base: [number, number, number], alpha = 0.10): string {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  const [br,bg,bb] = base;
+  return `rgb(${Math.round(r*alpha+br*(1-alpha))},${Math.round(g*alpha+bg*(1-alpha))},${Math.round(b*alpha+bb*(1-alpha))})`;
 }
 
 /**
@@ -154,16 +168,17 @@ function FreqBar({ item, max, accent }: { item: { value: string; count: number; 
 }
 
 /* ── Export-only FreqBar — inline styles, no Tailwind ───────────────────── */
-function ExportFreqBar({ item, max, accent, textColor, mutedColor }: {
+function ExportFreqBar({ item, max, accent, textColor, mutedColor, isLight }: {
   item: { value: string; count: number; pct: number }; max: number;
-  accent: string; textColor: string; mutedColor: string;
+  accent: string; textColor: string; mutedColor: string; isLight: boolean;
 }) {
+  const trackBg = isLight ? "rgba(0,0,0,.10)" : "rgba(255,255,255,.10)";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "2px 0" }}>
       <span style={{ fontSize: "11px", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: textColor }}>
         {item.value || "(vide)"}
       </span>
-      <div style={{ width: "112px", flexShrink: 0, borderRadius: "999px", overflow: "hidden", height: "8px", background: "rgba(255,255,255,.10)" }}>
+      <div style={{ width: "112px", flexShrink: 0, borderRadius: "999px", overflow: "hidden", height: "8px", background: trackBg }}>
         <div style={{ height: "8px", borderRadius: "999px", width: `${(item.count / max) * 100}%`, backgroundColor: accent }} />
       </div>
       <span style={{ fontSize: "10px", flexShrink: 0, width: "36px", textAlign: "right", color: mutedColor }}>{item.pct}%</span>
@@ -234,14 +249,20 @@ function ColCard({
   const cardBg       = borderColor ? `${borderColor}18` : bg;
   const glowHex      = borderColor ?? "#6C63FF";
 
-  // Export colours — fully resolved hex, no CSS vars
-  const exportAccent  = accent.startsWith("var") ? "#6C63FF" : accent;
-  // Preserve the user's custom colour; fall back to the type accent colour
-  const exportBorder  = borderColor ?? exportAccent;
-  // If a custom colour is set: blend it on a neutral dark base so ALL card
-  // types look visually consistent when the same colour is applied.
-  // No custom colour: fall back to the type-specific solid background.
-  const exportBgFinal = borderColor ? blendOnDark(borderColor, 0.18) : solidBg;
+  // Export colours — fully resolved, adapts to light/dark theme
+  const exportAccent   = accent.startsWith("var") ? "#6C63FF" : accent;
+  const exportBorder   = borderColor ?? exportAccent;
+  // Blend the chosen colour (or type accent) over the REAL page bg so the
+  // export matches the app theme (light or dark).
+  const baseRgb        = parseRgb(exportBg);
+  const isLight        = isLightBg(baseRgb);
+  const tintHex        = borderColor ?? exportAccent;
+  // Use a slightly stronger alpha in light mode so the tint is visible
+  const exportBgFinal  = blendOnBase(tintHex, baseRgb, isLight ? 0.12 : 0.16);
+  // Text/muted colours that work on both light & dark export backgrounds
+  const exportTextColor  = isLight ? "#1a1a2e" : "#f0f0f8";
+  const exportMutedColor = isLight ? "#6b7280" : "#8a92a6";
+  const exportCellBg     = isLight ? "rgba(0,0,0,.05)" : "rgba(255,255,255,.07)";
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -422,7 +443,7 @@ function ColCard({
         {/* export header: icon + clean title (no number prefix) */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: "10px", padding: "20px 20px 0" }}>
           <span style={{ color: exportAccent, flexShrink: 0, marginTop: "2px" }}>{TYPE_ICON[s.type]}</span>
-          <span style={{ fontSize: "13px", fontWeight: 600, lineHeight: 1.5, color: exportBg === "#fff" ? "#1a1a2e" : "#f0f0f8" }}>
+          <span style={{ fontSize: "13px", fontWeight: 600, lineHeight: 1.5, color: exportTextColor }}>
             {cleanTitle(s.header)}
           </span>
         </div>
@@ -432,17 +453,17 @@ function ColCard({
 
           {/* stats row */}
           <div style={{ display: "flex", gap: "24px", flexWrap: "wrap" }}>
-            <ExportStat label="REMPLI"          value={`${s.filled}`}      sub={`${(100 - s.emptyPct).toFixed(0)}%`} accent={exportAccent} />
-            <ExportStat label="VIDE"            value={`${s.empty}`}       sub={`${s.emptyPct.toFixed(0)}%`}         accent="#718096" />
-            {s.uniqueCount != null && <ExportStat label="VALEURS UNIQUES" value={`${s.uniqueCount}`} accent={exportAccent} />}
+            <ExportStat label="REMPLI"          value={`${s.filled}`}      sub={`${(100 - s.emptyPct).toFixed(0)}%`} accent={exportAccent} muted={exportMutedColor} />
+            <ExportStat label="VIDE"            value={`${s.empty}`}       sub={`${s.emptyPct.toFixed(0)}%`}         accent={exportMutedColor} muted={exportMutedColor} />
+            {s.uniqueCount != null && <ExportStat label="VALEURS UNIQUES" value={`${s.uniqueCount}`} accent={exportAccent} muted={exportMutedColor} />}
           </div>
 
           {/* numeric / score grid */}
           {(s.type === "numeric" || s.type === "score") && s.min != null && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: "8px" }}>
               {([["Min", s.min], ["Max", s.max], ["Moy.", s.avg], ["Méd.", s.median], ["σ", s.stddev]] as [string, number][]).map(([l, v]) => (
-                <div key={l} style={{ borderRadius: "8px", padding: "8px", textAlign: "center", background: "rgba(255,255,255,.07)" }}>
-                  <p style={{ fontSize: "9px", marginBottom: "2px", color: "#718096" }}>{l}</p>
+                <div key={l} style={{ borderRadius: "8px", padding: "8px", textAlign: "center", background: exportCellBg }}>
+                  <p style={{ fontSize: "9px", marginBottom: "2px", color: exportMutedColor }}>{l}</p>
                   <p style={{ fontSize: "12px", fontWeight: 700, color: exportAccent }}>{v}</p>
                 </div>
               ))}
@@ -451,21 +472,21 @@ function ColCard({
 
           {/* score chart */}
           {s.type === "score" && allFreqs.length > 0 && (
-            <ExportScoreChart freqs={allFreqs} accent={exportAccent} textColor="#f0f0f8" mutedColor="#718096" />
+            <ExportScoreChart freqs={allFreqs} accent={exportAccent} textColor={exportTextColor} mutedColor={exportMutedColor} />
           )}
 
           {/* frequency bars — ALL items shown */}
           {hasFreqs && s.type !== "score" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
               {allFreqs.map(f => (
-                <ExportFreqBar key={f.value} item={f} max={maxCount} accent={exportAccent} textColor="#f0f0f8" mutedColor="#718096" />
+                <ExportFreqBar key={f.value} item={f} max={maxCount} accent={exportAccent} textColor={exportTextColor} mutedColor={exportMutedColor} isLight={isLight} />
               ))}
             </div>
           )}
 
           {/* text type */}
           {s.type === "text" && (
-            <p style={{ fontSize: "11px", color: "#718096" }}>
+            <p style={{ fontSize: "11px", color: exportMutedColor }}>
               {s.uniqueCount} réponse{(s.uniqueCount ?? 0) > 1 ? "s" : ""} unique{(s.uniqueCount ?? 0) > 1 ? "s" : ""}
             </p>
           )}
@@ -486,13 +507,13 @@ function Stat({ label, value, sub, accent }: { label: string; value: string; sub
   );
 }
 
-function ExportStat({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent: string }) {
+function ExportStat({ label, value, sub, accent, muted }: { label: string; value: string; sub?: string; accent: string; muted: string }) {
   return (
     <div>
-      <p style={{ fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "2px", color: "#718096" }}>{label}</p>
+      <p style={{ fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "2px", color: muted }}>{label}</p>
       <p style={{ fontSize: "14px", fontWeight: 700, lineHeight: 1, color: accent }}>
         {value}
-        {sub && <span style={{ fontSize: "10px", fontWeight: 400, marginLeft: "4px", color: "#718096" }}>{sub}</span>}
+        {sub && <span style={{ fontSize: "10px", fontWeight: 400, marginLeft: "4px", color: muted }}>{sub}</span>}
       </p>
     </div>
   );
