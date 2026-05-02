@@ -131,7 +131,7 @@ export default function Navbar() {
           {/* Brand */}
           <a href="/" className="flex items-center gap-3 no-underline">
             <NebryonLogo size={32} />
-            <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: "1rem", color: "var(--text)", letterSpacing: ".5px", transition: "color 0.3s ease" }}>
+            <span style={{ fontWeight: 800, fontSize: "1.2rem", color: "var(--text)", letterSpacing: ".5px", transition: "color 0.3s ease" }}>
               <span style={{ color: "var(--nebula)" }}>Nebr</span>yon
             </span>
           </a>
