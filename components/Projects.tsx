@@ -67,6 +67,12 @@ export default function Projects() {
                 {p.description}
               </p>
 
+              {isMobile && (
+                <p className="mt-1.5 text-[11px]" style={{ color: "var(--gold)" }}>
+                  Aperçu de l'application
+                </p>
+              )}
+
               <div className="mt-4 flex flex-wrap gap-2">
                 {p.tags.map((t) => (
                   <span
