@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { exportTimestamp } from "@/lib/shared/exportTimestamp";
 import { createPortal } from "react-dom";
 import { BlobProvider, PDFDownloadLink } from "@react-pdf/renderer";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -561,7 +562,7 @@ export default function CVBuilder({ onClose }: Props) {
     }
   }
 
-  const fileName = `CV_${data.personal.firstName || "Prénom"}_${data.personal.lastName || "Nom"}.pdf`.replace(/\s+/g, "_");
+  const fileName = `CV_${data.personal.firstName || "Prénom"}_${data.personal.lastName || "Nom"}_${exportTimestamp()}.pdf`.replace(/\s+/g, "_");
 
   if (!mounted) return null;
 

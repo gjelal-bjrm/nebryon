@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Upload, X, CheckCircle2, AlertCircle, ChevronDown } from "lucide-react";
+import { Upload, X, CheckCircle2, AlertCircle, ChevronDown, Check } from "lucide-react";
 import { parseFile } from "@/lib/lumen/parseData";
 import type { DataRow } from "@/lib/lumen/templateEngine";
 
@@ -30,6 +30,11 @@ export default function DataTab({
   const [filename,  setFilename]  = useState<string | null>(initialFilename ?? null);
   const [showMatched, setShowMatched] = useState(false);
 
+  // Draft state: what the user is currently typing (not yet confirmed)
+  const [draftValues, setDraftValues] = useState<Record<string, string>>({});
+  // Which fields were just validated (briefly highlighted)
+  const [recentlyValidated, setRecentlyValidated] = useState<string | null>(null);
+
   const loadFile = useCallback(async (file: File) => {
     setLoading(true);
     setError(null);
@@ -39,7 +44,6 @@ export default function DataTab({
       const cols = Object.keys(rows[0]);
       setFilename(file.name);
       onDataChange(rows, cols);
-      // Auto-map case-insensitively
       const auto: Record<string, string> = {};
       for (const v of variables) {
         const match = cols.find((c) => c.toLowerCase() === v.toLowerCase());
@@ -47,6 +51,7 @@ export default function DataTab({
       }
       onMappingChange(auto);
       onFixedValuesChange({});
+      setDraftValues({});
     } catch (e) {
       setError(String(e));
     } finally {
@@ -69,22 +74,41 @@ export default function DataTab({
   const clearData = () => {
     setFilename(null); setError(null);
     onDataChange([], []); onMappingChange({}); onFixedValuesChange({});
+    setDraftValues({});
   };
 
-  // Resolved = has column mapping OR non-empty fixed value
-  const isResolved = (v: string) => !!mapping[v] || !!fixedValues[v]?.trim();
-  const matched   = variables.filter((v) =>  mapping[v]);        // auto or manually mapped to column
-  const unresolved = variables.filter((v) => !isResolved(v));    // needs action
-  const withFixed  = variables.filter((v) => !mapping[v] && !!fixedValues[v]?.trim());
+  // Commit a draft fixed value for field v
+  const validateFixed = (v: string) => {
+    const val = draftValues[v]?.trim();
+    if (!val) return;
+    onFixedValuesChange({ ...fixedValues, [v]: val });
+    setDraftValues((prev) => { const n = { ...prev }; delete n[v]; return n; });
+    setShowMatched(true);  // expand configured section so user sees the result
+    setRecentlyValidated(v);
+    setTimeout(() => setRecentlyValidated(null), 2500);
+  };
+
+  // Move a confirmed fixed-value field back to "À configurer" for editing
+  const editFixed = (v: string) => {
+    setDraftValues((prev) => ({ ...prev, [v]: fixedValues[v] ?? "" }));
+    const fv = { ...fixedValues };
+    delete fv[v];
+    onFixedValuesChange(fv);
+  };
+
+  // Resolved = confirmed column mapping OR confirmed fixed value
+  const isResolved   = (v: string) => !!mapping[v] || !!fixedValues[v]?.trim();
+  const matched      = variables.filter((v) =>  mapping[v]);
+  const withFixed    = variables.filter((v) => !mapping[v] && !!fixedValues[v]?.trim());
+  const unresolved   = variables.filter((v) => !isResolved(v));
   const totalResolved = matched.length + withFixed.length;
-  const canContinue = data.length > 0 && unresolved.length === 0;
+  const canContinue  = data.length > 0 && unresolved.length === 0;
 
   // ── No data yet ────────────────────────────────────────────────────────────
   if (!data.length) {
     return (
       <div className="flex flex-col gap-5 h-full justify-center items-center">
         <div className="w-full max-w-lg mx-auto flex flex-col gap-5">
-          {/* Intro */}
           <div className="text-center">
             <div className="text-4xl mb-3">📂</div>
             <h2 className="text-base font-bold mb-1" style={{ color: "var(--text)" }}>
@@ -96,7 +120,6 @@ export default function DataTab({
             </p>
           </div>
 
-          {/* Drop zone */}
           <div
             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
             onDragLeave={() => setDragging(false)}
@@ -118,9 +141,7 @@ export default function DataTab({
                   <Upload size={24} style={{ color: "#0EA5E9" }} />
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-semibold mb-1" style={{ color: "var(--text)" }}>
-                    Glissez votre fichier ici
-                  </p>
+                  <p className="text-sm font-semibold mb-1" style={{ color: "var(--text)" }}>Glissez votre fichier ici</p>
                   <p className="text-xs" style={{ color: "var(--muted)" }}>
                     ou <span style={{ color: "#0EA5E9" }}>cliquez pour choisir un fichier</span>
                   </p>
@@ -166,8 +187,7 @@ export default function DataTab({
             {data.length} ligne{data.length !== 1 ? "s" : ""} · {columns.length} colonne{columns.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <button
-          onClick={() => document.getElementById("lumen-file-input-loaded")?.click()}
+        <button onClick={() => document.getElementById("lumen-file-input-loaded")?.click()}
           className="text-[11px] px-3 py-1 rounded-lg transition cursor-pointer hover:opacity-80 flex-shrink-0"
           style={{ border: "1px solid var(--stroke)", color: "var(--muted)" }}>
           Changer
@@ -212,8 +232,8 @@ export default function DataTab({
                   </p>
                   <p className="text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
                     Le modèle utilise <strong style={{ color: "var(--text)" }}>{variables.length} champs</strong> au total.
-                    {" "}{totalResolved > 0 && <span>{totalResolved} ont été trouvés automatiquement.</span>}
-                    {" "}Pour chaque champ manquant ci-dessous, indiquez quelle colonne de votre fichier correspond,
+                    {totalResolved > 0 && <span> {totalResolved} ont été trouvés automatiquement.</span>}
+                    {" "}Pour chaque champ manquant, indiquez quelle colonne de votre fichier correspond,
                     ou entrez une valeur commune à tous les documents.
                   </p>
                 </>
@@ -228,7 +248,6 @@ export default function DataTab({
                 </>
               )}
             </div>
-            {/* Progress */}
             <div className="flex-shrink-0 text-right">
               <p className="text-xl font-bold" style={{ color: unresolved.length > 0 ? "#0EA5E9" : "#48BB78" }}>
                 {totalResolved}/{variables.length}
@@ -269,15 +288,14 @@ export default function DataTab({
                           onMappingChange(newMapping);
                           if (val) {
                             const fv = { ...fixedValues }; delete fv[v]; onFixedValuesChange(fv);
+                            setDraftValues((prev) => { const n = { ...prev }; delete n[v]; return n; });
                           }
                         }}
                         className="w-full rounded-xl px-3 py-2.5 text-sm cursor-pointer outline-none appearance-none pr-8"
                         style={{ background: "var(--card-bg)", border: "1px solid rgba(14,165,233,.35)", color: mapping[v] ? "var(--text)" : "var(--muted)" }}
                       >
                         <option value="">— Sélectionner une colonne —</option>
-                        {columns.map((c) => (
-                          <option key={c} value={c}>{c}</option>
-                        ))}
+                        {columns.map((c) => <option key={c} value={c}>{c}</option>)}
                       </select>
                       <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--muted)" }} />
                     </div>
@@ -290,27 +308,51 @@ export default function DataTab({
                     <div className="flex-1 h-px" style={{ background: "var(--stroke)" }} />
                   </div>
 
-                  {/* Fixed value */}
-                  <div>
-                    <label className="text-[11px] font-semibold block mb-1.5" style={{ color: "var(--muted)" }}>
+                  {/* Fixed value — draft + validate */}
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[11px] font-semibold block" style={{ color: "var(--muted)" }}>
                       Entrer une valeur identique pour tous les documents :
                     </label>
                     <input
                       type="text"
                       placeholder={`ex: valeur commune pour "${v}"`}
-                      value={fixedValues[v] ?? ""}
-                      onChange={(e) => {
-                        onFixedValuesChange({ ...fixedValues, [v]: e.target.value });
-                        if (e.target.value && mapping[v]) {
-                          const m = { ...mapping }; delete m[v]; onMappingChange(m);
-                        }
-                      }}
+                      value={draftValues[v] ?? ""}
+                      onChange={(e) => setDraftValues((prev) => ({ ...prev, [v]: e.target.value }))}
+                      onKeyDown={(e) => { if (e.key === "Enter") validateFixed(v); }}
                       className="w-full rounded-xl px-3 py-2.5 text-sm outline-none"
                       style={{ background: "var(--card-bg)", border: "1px solid var(--stroke)", color: "var(--text)" }}
                     />
+                    <div className="flex items-center gap-2 justify-end">
+                      {draftValues[v] && (
+                        <button
+                          onClick={() => setDraftValues((prev) => { const n = { ...prev }; delete n[v]; return n; })}
+                          className="px-3 py-1.5 rounded-lg text-xs transition cursor-pointer hover:opacity-80"
+                          style={{ border: "1px solid var(--stroke)", color: "var(--muted)" }}>
+                          Annuler
+                        </button>
+                      )}
+                      <button
+                        onClick={() => validateFixed(v)}
+                        disabled={!draftValues[v]?.trim()}
+                        className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90"
+                        style={{ background: "#0EA5E9", color: "#fff" }}>
+                        <Check size={12} /> Valider cette valeur
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* ── Recently validated toast ── */}
+          {recentlyValidated && (
+            <div className="flex items-center gap-2 rounded-xl px-4 py-2.5 flex-shrink-0"
+              style={{ background: "rgba(72,187,120,.1)", border: "1px solid rgba(72,187,120,.3)" }}>
+              <CheckCircle2 size={14} style={{ color: "#48BB78" }} />
+              <p className="text-xs font-semibold" style={{ color: "#48BB78" }}>
+                Valeur enregistrée pour <code style={{ color: "#0EA5E9" }}>{recentlyValidated}</code>
+              </p>
             </div>
           )}
 
@@ -335,9 +377,8 @@ export default function DataTab({
                       <code className="text-[11px] font-semibold flex-shrink-0" style={{ color: "#0EA5E9" }}>{v}</code>
                       <span className="text-[11px]" style={{ color: "var(--muted)" }}>←</span>
                       <span className="text-[11px]" style={{ color: "var(--text)" }}>
-                        colonne <strong>"{mapping[v]}"</strong> de votre fichier
+                        colonne <strong>&ldquo;{mapping[v]}&rdquo;</strong>
                       </span>
-                      {/* Allow changing mapping */}
                       <div className="ml-auto relative flex-shrink-0">
                         <select
                           value={mapping[v]}
@@ -355,12 +396,25 @@ export default function DataTab({
                     </div>
                   ))}
                   {withFixed.map((v) => (
-                    <div key={v} className="flex items-center gap-3 rounded-xl px-3 py-2"
-                      style={{ background: "rgba(72,187,120,.05)", border: "1px solid rgba(72,187,120,.2)" }}>
+                    <div key={v}
+                      className="flex items-center gap-3 rounded-xl px-3 py-2"
+                      style={{
+                        background: v === recentlyValidated ? "rgba(72,187,120,.12)" : "rgba(72,187,120,.05)",
+                        border: `1px solid ${v === recentlyValidated ? "rgba(72,187,120,.4)" : "rgba(72,187,120,.2)"}`,
+                        transition: "background 0.4s, border-color 0.4s",
+                      }}>
                       <CheckCircle2 size={13} style={{ color: "#48BB78", flexShrink: 0 }} />
                       <code className="text-[11px] font-semibold flex-shrink-0" style={{ color: "#0EA5E9" }}>{v}</code>
                       <span className="text-[11px]" style={{ color: "var(--muted)" }}>= valeur fixe :</span>
-                      <span className="text-[11px] font-semibold" style={{ color: "var(--text)" }}>"{fixedValues[v]}"</span>
+                      <span className="text-[11px] font-semibold" style={{ color: "var(--text)" }}>
+                        &ldquo;{fixedValues[v]}&rdquo;
+                      </span>
+                      <button
+                        onClick={() => editFixed(v)}
+                        className="ml-auto text-[10px] px-2 py-0.5 rounded-lg transition cursor-pointer hover:opacity-80 flex-shrink-0"
+                        style={{ border: "1px solid rgba(72,187,120,.3)", color: "var(--muted)" }}>
+                        Modifier
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -376,7 +430,9 @@ export default function DataTab({
           <button onClick={onContinue} disabled={!canContinue}
             className="px-6 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90"
             style={{ background: "#0EA5E9", color: "#fff" }}>
-            {canContinue ? "Voir et modifier le modèle →" : `Configurez les ${unresolved.length} champ${unresolved.length > 1 ? "s" : ""} manquant${unresolved.length > 1 ? "s" : ""}`}
+            {canContinue
+              ? "Voir et modifier le modèle →"
+              : `Configurez les ${unresolved.length} champ${unresolved.length > 1 ? "s" : ""} manquant${unresolved.length > 1 ? "s" : ""}`}
           </button>
         </div>
       )}

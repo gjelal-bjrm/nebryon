@@ -5,6 +5,7 @@ import { Download, FileText, Loader2, CheckCircle2, AlertCircle } from "lucide-r
 import { renderTemplate } from "@/lib/lumen/templateEngine";
 import type { DataRow } from "@/lib/lumen/templateEngine";
 import { buildExportHtml } from "./editor/WysiwygEditor";
+import { exportTimestamp } from "@/lib/shared/exportTimestamp";
 
 interface PdfOptions {
   format:       "A4" | "Letter" | "Legal";
@@ -125,7 +126,7 @@ export default function GenerateTab({ template, data, mapping, fixedValues, onBa
     const url = URL.createObjectURL(zipBlob);
     const a   = document.createElement("a");
     a.href     = url;
-    a.download = `lumen_${data.length}_documents.zip`;
+    a.download = `lumen_${data.length}_docs_${exportTimestamp()}.zip`;
     a.click();
     URL.revokeObjectURL(url);
   };

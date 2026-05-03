@@ -2,6 +2,7 @@
 /* ── Pulsar — statistics panel ───────────────────────────────────────────── */
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { exportTimestamp } from "@/lib/shared/exportTimestamp";
 import {
   ChevronDown, Hash, AlignLeft, ToggleLeft, List, Calendar, Star, BarChart3,
   Download, ImageDown, FolderArchive, CheckSquare, Square, Palette,
@@ -147,7 +148,7 @@ async function downloadZip(entries: { el: HTMLElement; filename: string }[]) {
   const blob = await zip.generateAsync({ type: "blob" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = "pulsar_stats.zip"; a.click();
+  a.href = url; a.download = `pulsar_stats_${exportTimestamp()}.zip`; a.click();
   URL.revokeObjectURL(url);
 }
 
@@ -575,8 +576,9 @@ export default function StatsPanel({ stats }: StatsPanelProps) {
   const handleDownloadAll = async () => {
     setBulkDownloading("all");
     try {
+      const ts = exportTimestamp();
       const entries = filtered
-        .map(s => ({ el: exportCardRefs.current.get(s.header)!, filename: `${safeName(s.header)}.png` }))
+        .map(s => ({ el: exportCardRefs.current.get(s.header)!, filename: `${safeName(s.header)}_${ts}.png` }))
         .filter(e => !!e.el);
       await downloadZip(entries);
     } finally { setBulkDownloading(null); }
@@ -585,9 +587,10 @@ export default function StatsPanel({ stats }: StatsPanelProps) {
   const handleDownloadSelection = async () => {
     setBulkDownloading("selection");
     try {
+      const ts = exportTimestamp();
       const entries = filtered
         .filter(s => selected.has(s.header))
-        .map(s => ({ el: exportCardRefs.current.get(s.header)!, filename: `${safeName(s.header)}.png` }))
+        .map(s => ({ el: exportCardRefs.current.get(s.header)!, filename: `${safeName(s.header)}_${ts}.png` }))
         .filter(e => !!e.el);
       if (entries.length === 0) return;
       if (entries.length === 1) {

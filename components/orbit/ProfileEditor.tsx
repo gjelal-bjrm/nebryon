@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { exportTimestamp } from "@/lib/shared/exportTimestamp";
 import { useLiveQuery } from "dexie-react-hooks";
 import { X, Camera, Download, Upload, AlertTriangle, FolderOpen, Check, RefreshCw, Trash2 } from "lucide-react";
 import { db, exportBackup, importBackup, getBackupDirHandle, setBackupDirHandle } from "@/lib/orbit/db";
@@ -98,7 +99,7 @@ export default function ProfileEditor({ onClose }: Props) {
       const blob = new Blob([json], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `orbit-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `orbit-backup-${exportTimestamp()}.json`;
       a.click();
       setBackupStatus("✓ Backup téléchargé !");
     } catch { setBackupStatus("⚠ Erreur lors de l'export"); }
@@ -126,7 +127,7 @@ export default function ProfileEditor({ onClose }: Props) {
       const blob = new Blob([json], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `nebryon-backup-avant-reset-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `nebryon-backup-avant-reset-${exportTimestamp()}.json`;
       a.click();
       setExported(true);
     } catch { /* ignore */ }

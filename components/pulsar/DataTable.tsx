@@ -2,6 +2,7 @@
 /* ── Pulsar — sortable / filterable data table ───────────────────────────── */
 
 import { useState, useMemo, useCallback } from "react";
+import { exportTimestamp } from "@/lib/shared/exportTimestamp";
 import {
   ChevronUp, ChevronDown, ChevronsUpDown, Download,
   Search, Columns3, X, Plus, SlidersHorizontal, HelpCircle,
@@ -80,7 +81,7 @@ function exportData(rows: Record<string, string>[], headers: string[], fmt: "csv
   }
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = url; a.download = `pulsar_export.${ext}`; a.click();
+  const a = document.createElement("a"); a.href = url; a.download = `pulsar_export_${exportTimestamp()}.${ext}`; a.click();
   URL.revokeObjectURL(url);
 }
 

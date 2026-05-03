@@ -85,7 +85,10 @@ export async function clearStoredDir(): Promise<void> {
 /* ── Write backup ────────────────────────────────────────── */
 
 function backupFilename(): string {
-  return `orbit-backup-${new Date().toISOString().replace(/:/g, "-").slice(0, 19)}.json`;
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  const ts = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+  return `orbit-backup-${ts}.json`;
 }
 
 /** Write a backup to the configured directory — returns filename */
