@@ -4,6 +4,7 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import ConditionalNavbar from "@/components/ConditionalNavbar";
 import WelcomeSetupLoader from "@/components/WelcomeSetupLoader";
 import BirthdayBannerLoader from "@/components/BirthdayBannerLoader";
+import ElectronQuitHandler from "@/components/ElectronQuitHandler";
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr" className={jakarta.variable}>
       <body className={`${jakarta.className} min-h-screen antialiased`}>
+        <ElectronQuitHandler />
         <BirthdayBannerLoader />
         <ConditionalNavbar />
         <WelcomeSetupLoader />

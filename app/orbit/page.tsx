@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { useAutoBackup } from "@/hooks/useAutoBackup";
-import { writeBackup, isElectron } from "@/lib/orbit/autobackup";
 import { useLiveQuery } from "dexie-react-hooks";
 import dynamic from "next/dynamic";
 import RequestPanel from "@/components/orbit/RequestPanel";
@@ -132,14 +131,7 @@ export default function OrbitPage() {
 
   useAutoBackup();
 
-  useEffect(() => {
-    if (!isElectron()) return;
-    const handler = async () => {
-      try { await writeBackup(); } catch { /* silent */ }
-      window.electronAPI!.quitReady();
-    };
-    window.electronAPI!.onBeforeQuit(handler);
-  }, []);
+  // Before-quit backup is now handled globally in ElectronQuitHandler (app/layout.tsx)
 
   const [activeEnvId, setActiveEnvId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
