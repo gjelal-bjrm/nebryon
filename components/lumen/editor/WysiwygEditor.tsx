@@ -36,9 +36,10 @@ const VariableNode = Node.create({
       "span",
       mergeAttributes(HTMLAttributes, {
         "data-variable": node.attrs.name,
-        style: "display:inline-block;background:rgba(14,165,233,.18);color:#0EA5E9;padding:0 5px;border-radius:4px;font-family:monospace;font-size:0.82em;font-weight:600;user-select:all;cursor:default;border:1px solid rgba(14,165,233,.35)",
+        title: `Champ automatique : ${node.attrs.name}`,
+        style: "display:inline-block;background:rgba(14,165,233,.18);color:#0EA5E9;padding:1px 7px 1px 5px;border-radius:4px;font-family:monospace;font-size:0.82em;font-weight:600;user-select:all;cursor:default;border:1px solid rgba(14,165,233,.35);gap:4px",
       }),
-      `{{ ${node.attrs.name} }}`,
+      `◆ ${node.attrs.name}`,
     ];
   },
 });

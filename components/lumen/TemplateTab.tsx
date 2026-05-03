@@ -17,9 +17,10 @@ interface Props {
   template:   string;
   onChange:   (v: string) => void;
   onContinue: () => void;
+  onBack?:    () => void;
 }
 
-export default function TemplateTab({ template, onChange, onContinue }: Props) {
+export default function TemplateTab({ template, onChange, onContinue, onBack }: Props) {
   const [showPreview, setShowPreview] = useState(false);
   const [htmlMode,    setHtmlMode]    = useState(false);
 
@@ -128,14 +129,21 @@ export default function TemplateTab({ template, onChange, onContinue }: Props) {
       )}
 
       {/* Continue */}
-      <div className="flex justify-end flex-shrink-0">
+      <div className="flex items-center justify-between flex-shrink-0">
+        {onBack ? (
+          <button onClick={onBack}
+            className="px-4 py-2 rounded-xl text-sm transition cursor-pointer hover:opacity-80"
+            style={{ border: "1px solid var(--stroke)", color: "var(--muted)" }}>
+            ← Données
+          </button>
+        ) : <div />}
         <button
           onClick={onContinue}
           disabled={template.trim().length === 0}
           className="px-5 py-2 rounded-xl text-sm font-semibold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ background: "#0EA5E9", color: "#fff" }}
         >
-          Importer les données →
+          Générer les PDFs →
         </button>
       </div>
     </div>

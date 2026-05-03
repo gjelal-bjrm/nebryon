@@ -10,9 +10,10 @@ import GenerateTab from "./GenerateTab";
 
 type Step = 1 | 2 | 3;
 
+// Données → Modèle → Générer (data-first flow)
 const STEPS = [
-  { id: 1 as Step, label: "Modèle",  icon: FileCode2 },
-  { id: 2 as Step, label: "Données", icon: Database  },
+  { id: 1 as Step, label: "Données", icon: Database  },
+  { id: 2 as Step, label: "Modèle",  icon: FileCode2 },
   { id: 3 as Step, label: "Générer", icon: Zap       },
 ];
 
@@ -106,7 +107,7 @@ export default function LumenTool({
           {variables.length > 0 && (
             <span className="text-[11px] px-2.5 py-0.5 rounded-full"
               style={{ background: "rgba(14,165,233,.1)", color: "#0EA5E9", border: "1px solid rgba(14,165,233,.2)" }}>
-              {variables.length} var.
+              {variables.length} champ{variables.length !== 1 ? "s" : ""}
             </span>
           )}
           {data.length > 0 && (
@@ -130,14 +131,8 @@ export default function LumenTool({
 
       {/* Tab content */}
       <div className="flex-1 min-h-0 overflow-auto">
+        {/* Step 1: Data import & mapping */}
         {step === 1 && (
-          <TemplateTab
-            template={template}
-            onChange={setTemplate}
-            onContinue={() => setStep(2)}
-          />
-        )}
-        {step === 2 && (
           <DataTab
             variables={variables}
             data={data}
@@ -148,10 +143,21 @@ export default function LumenTool({
             onDataChange={handleDataChange}
             onMappingChange={setMapping}
             onFixedValuesChange={setFixedValues}
+            onContinue={() => setStep(2)}
+          />
+        )}
+
+        {/* Step 2: Template editor */}
+        {step === 2 && (
+          <TemplateTab
+            template={template}
+            onChange={setTemplate}
             onBack={() => setStep(1)}
             onContinue={() => setStep(3)}
           />
         )}
+
+        {/* Step 3: Generate PDFs */}
         {step === 3 && (
           <GenerateTab
             template={template}
