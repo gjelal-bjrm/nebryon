@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useState } from "react";
 import { Upload, X, ArrowRight } from "lucide-react";
@@ -82,8 +82,8 @@ export default function DataTab({
         onDrop={handleDrop}
         className="relative flex flex-col items-center justify-center gap-3 rounded-2xl p-8 transition flex-shrink-0 cursor-pointer"
         style={{
-          border:     `2px dashed ${dragging ? "#F6AD55" : "var(--stroke)"}`,
-          background: dragging ? "rgba(246,173,85,.06)" : "rgba(255,255,255,.02)",
+          border:     `2px dashed ${dragging ? "#0EA5E9" : "var(--stroke)"}`,
+          background: dragging ? "rgba(14,165,233,.06)" : "rgba(255,255,255,.02)",
           minHeight:  "120px",
         }}
         onClick={() => document.getElementById("lumen-file-input")?.click()}
@@ -92,12 +92,12 @@ export default function DataTab({
           className="sr-only" onChange={handleInput} />
 
         {loading ? (
-          <p className="text-sm animate-pulse" style={{ color: "#F6AD55" }}>Chargement…</p>
+          <p className="text-sm animate-pulse" style={{ color: "#0EA5E9" }}>Chargement…</p>
         ) : filename ? (
           <div className="flex items-center gap-3">
             <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>{filename}</span>
             <span className="text-[11px] px-2 py-0.5 rounded-full"
-              style={{ background: "rgba(246,173,85,.12)", color: "#F6AD55", border: "1px solid rgba(246,173,85,.25)" }}>
+              style={{ background: "rgba(14,165,233,.12)", color: "#0EA5E9", border: "1px solid rgba(14,165,233,.25)" }}>
               {data.length} ligne{data.length !== 1 ? "s" : ""}
             </span>
             <button onClick={(e) => { e.stopPropagation(); clearData(); }}
@@ -110,7 +110,7 @@ export default function DataTab({
           <>
             <Upload size={22} style={{ color: "var(--muted)" }} />
             <p className="text-sm text-center" style={{ color: "var(--muted)" }}>
-              Glissez votre fichier ici ou <span style={{ color: "#F6AD55" }}>cliquez pour parcourir</span>
+              Glissez votre fichier ici ou <span style={{ color: "#0EA5E9" }}>cliquez pour parcourir</span>
             </p>
             <p className="text-[11px]" style={{ color: "var(--muted)" }}>
               Excel · CSV · JSON · XML
@@ -137,7 +137,7 @@ export default function DataTab({
             {variables.map((v) => (
               <div key={v} className="flex items-center gap-2">
                 <code className="text-[11px] px-2 py-0.5 rounded-full flex-shrink-0"
-                  style={{ background: "rgba(246,173,85,.14)", color: "#FDE68A", border: "1px solid rgba(246,173,85,.25)", maxWidth: "140px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  style={{ background: "rgba(14,165,233,.14)", color: "#BAE6FD", border: "1px solid rgba(14,165,233,.25)", maxWidth: "140px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {`{{ ${v} }}`}
                 </code>
                 <ArrowRight size={12} style={{ color: "var(--muted)", flexShrink: 0 }} />
@@ -206,7 +206,7 @@ export default function DataTab({
         </button>
         <button onClick={onContinue} disabled={!canContinue}
           className="px-5 py-2 rounded-xl text-sm font-semibold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ background: "#F6AD55", color: "#1a0f00" }}>
+          style={{ background: "#0EA5E9", color: "#fff" }}>
           Générer les PDFs →
         </button>
       </div>

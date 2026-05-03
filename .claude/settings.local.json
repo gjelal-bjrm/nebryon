@@ -8,7 +8,8 @@
       "Bash(git commit -m 'feat\\(tools\\): persist le filtre de catégorie sélectionné en localStorage *)",
       "Bash(git commit -m 'fix\\(tools\\): corrige hydration mismatch du filtre catégorie *)",
       "Bash(node -e ' *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(powershell -Command ' *)"
     ]
   }
 }

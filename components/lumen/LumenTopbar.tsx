@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -49,7 +49,7 @@ export default function LumenTopbar({ onOpenProfile }: Props) {
         <span
           className="text-xs font-bold tracking-widest select-none"
           style={{
-            background: "linear-gradient(90deg, #F6AD55 0%, #FDE68A 50%, #F6AD55 100%)",
+            background: "linear-gradient(90deg, #0EA5E9 0%, #BAE6FD 50%, #0EA5E9 100%)",
             WebkitBackgroundClip: "text",
             WebkitTextFillColor:  "transparent",
             backgroundClip:       "text",
@@ -71,8 +71,8 @@ export default function LumenTopbar({ onOpenProfile }: Props) {
               <a key={item.href} href={href}
                 className="flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold transition"
                 style={isCurrent
-                  ? { border: "1px solid #F6AD55", background: "rgba(246,173,85,.1)", color: "#FDE68A" }
-                  : { border: "1px solid var(--stroke)", background: "rgba(246,173,85,.06)", color: "var(--muted)" }}
+                  ? { border: "1px solid #0EA5E9", background: "rgba(14,165,233,.1)", color: "#BAE6FD" }
+                  : { border: "1px solid var(--stroke)", background: "rgba(14,165,233,.06)", color: "var(--muted)" }}
               >
                 {item.label}
               </a>
@@ -102,13 +102,13 @@ export default function LumenTopbar({ onOpenProfile }: Props) {
 
         <button onClick={onOpenProfile}
           className="flex items-center justify-center w-7 h-7 rounded-full overflow-hidden transition hover:opacity-80 cursor-pointer"
-          style={{ border: "1px solid var(--stroke)", background: profile?.photo ? "transparent" : "rgba(246,173,85,.12)" }}
+          style={{ border: "1px solid var(--stroke)", background: profile?.photo ? "transparent" : "rgba(14,165,233,.12)" }}
           title="Profil & Sauvegarde"
         >
           {profile?.photo ? (
             <img src={profile.photo} alt="avatar" className="w-full h-full object-cover" />
           ) : initial ? (
-            <span className="text-[10px] font-bold" style={{ color: "#F6AD55" }}>{initial.toUpperCase()}</span>
+            <span className="text-[10px] font-bold" style={{ color: "#0EA5E9" }}>{initial.toUpperCase()}</span>
           ) : (
             <User size={12} style={{ color: "var(--muted)" }} />
           )}

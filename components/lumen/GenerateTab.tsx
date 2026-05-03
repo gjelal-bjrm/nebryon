@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useState } from "react";
 import { Download, FileText, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
@@ -135,7 +135,7 @@ export default function GenerateTab({ template, data, mapping, onBack }: Props) 
                 <button key={f} onClick={() => setOpts((o) => ({ ...o, format: f }))}
                   className="px-3 py-1 rounded-lg text-[11px] transition cursor-pointer"
                   style={opts.format === f
-                    ? { background: "#F6AD55", color: "#1a0f00", fontWeight: 600 }
+                    ? { background: "#0EA5E9", color: "#fff", fontWeight: 600 }
                     : { border: "1px solid var(--stroke)", color: "var(--muted)" }}>
                   {f}
                 </button>
@@ -151,7 +151,7 @@ export default function GenerateTab({ template, data, mapping, onBack }: Props) 
                 <button key={l} onClick={() => setOpts((o) => ({ ...o, landscape: v }))}
                   className="px-3 py-1 rounded-lg text-[11px] transition cursor-pointer"
                   style={opts.landscape === v
-                    ? { background: "#F6AD55", color: "#1a0f00", fontWeight: 600 }
+                    ? { background: "#0EA5E9", color: "#fff", fontWeight: 600 }
                     : { border: "1px solid var(--stroke)", color: "var(--muted)" }}>
                   {l}
                 </button>
@@ -167,7 +167,7 @@ export default function GenerateTab({ template, data, mapping, onBack }: Props) 
                 <button key={l} onClick={() => setMargin(l, v)}
                   className="px-3 py-1 rounded-lg text-[11px] transition cursor-pointer"
                   style={marginPreset === l
-                    ? { background: "#F6AD55", color: "#1a0f00", fontWeight: 600 }
+                    ? { background: "#0EA5E9", color: "#fff", fontWeight: 600 }
                     : { border: "1px solid var(--stroke)", color: "var(--muted)" }}>
                   {l}
                 </button>
@@ -179,10 +179,10 @@ export default function GenerateTab({ template, data, mapping, onBack }: Props) 
 
       {/* Summary */}
       <div className="flex items-center gap-3 flex-shrink-0 rounded-xl px-4 py-3"
-        style={{ background: "rgba(246,173,85,.06)", border: "1px solid rgba(246,173,85,.18)" }}>
-        <FileText size={16} style={{ color: "#F6AD55", flexShrink: 0 }} />
+        style={{ background: "rgba(14,165,233,.06)", border: "1px solid rgba(14,165,233,.18)" }}>
+        <FileText size={16} style={{ color: "#0EA5E9", flexShrink: 0 }} />
         <p className="text-sm" style={{ color: "var(--text)" }}>
-          <span className="font-bold" style={{ color: "#F6AD55" }}>{data.length}</span>{" "}
+          <span className="font-bold" style={{ color: "#0EA5E9" }}>{data.length}</span>{" "}
           document{data.length !== 1 ? "s" : ""} à générer · format{" "}
           <span className="font-semibold">{opts.format}</span>{" "}
           {opts.landscape ? "paysage" : "portrait"}
@@ -205,7 +205,7 @@ export default function GenerateTab({ template, data, mapping, onBack }: Props) 
               className="h-full rounded-full transition-all duration-300"
               style={{
                 width:      `${progress}%`,
-                background: status === "error" ? "var(--red)" : "linear-gradient(90deg, #F6AD55, #FDE68A)",
+                background: status === "error" ? "var(--red)" : "linear-gradient(90deg, #0EA5E9, #BAE6FD)",
               }}
             />
           </div>
@@ -238,7 +238,7 @@ export default function GenerateTab({ template, data, mapping, onBack }: Props) 
             onClick={status === "running" ? undefined : handleGenerate}
             disabled={status === "running" || data.length === 0}
             className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: "#F6AD55", color: "#1a0f00" }}>
+            style={{ background: "#0EA5E9", color: "#fff" }}>
             {status === "running"
               ? <><Loader2 size={14} className="animate-spin" /> Génération…</>
               : <><FileText size={14} /> {status === "done" ? "Relancer" : "Générer les PDFs"}</>}

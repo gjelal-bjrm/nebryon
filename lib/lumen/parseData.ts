@@ -36,10 +36,26 @@ async function parseExcel(file: File): Promise<DataRow[]> {
 }
 
 async function parseJson(file: File): Promise<DataRow[]> {
-  const text = await file.text();
-  const data  = JSON.parse(text);
-  if (Array.isArray(data)) return data as DataRow[];
-  return [data as DataRow];
+  const raw = (await file.text()).trim();
+
+  // Try direct parse first
+  try {
+    const data = JSON.parse(raw);
+    if (Array.isArray(data)) return data as DataRow[];
+    return [data as DataRow];
+  } catch (_) {
+    // Fall-through: the file might be a sequence of objects without wrapping []
+  }
+
+  // Auto-fix: wrap in [] and retry (handles files like { … },\n{ … })
+  try {
+    const wrapped = `[${raw.replace(/,?\s*$/, "")}]`;
+    const data = JSON.parse(wrapped);
+    if (Array.isArray(data)) return data as DataRow[];
+    return [data as DataRow];
+  } catch (e) {
+    throw new Error(`JSON invalide : ${String(e)}`);
+  }
 }
 
 async function parseXml(file: File): Promise<DataRow[]> {

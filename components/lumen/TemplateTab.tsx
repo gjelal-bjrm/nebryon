@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { Eye, EyeOff, RotateCcw } from "lucide-react";
@@ -123,7 +123,7 @@ export default function TemplateTab({ template, onChange, onContinue }: Props) {
             Modèle HTML
           </span>
           <span className="text-[11px] px-2 py-0.5 rounded-full"
-            style={{ background: "rgba(246,173,85,.12)", color: "#F6AD55", border: "1px solid rgba(246,173,85,.25)" }}>
+            style={{ background: "rgba(14,165,233,.12)", color: "#0EA5E9", border: "1px solid rgba(14,165,233,.25)" }}>
             {variables.length} variable{variables.length !== 1 ? "s" : ""}
           </span>
         </div>
@@ -138,7 +138,7 @@ export default function TemplateTab({ template, onChange, onContinue }: Props) {
           <button
             onClick={() => setShowPreview((v) => !v)}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] transition hover:opacity-80 cursor-pointer"
-            style={{ border: "1px solid var(--stroke)", color: showPreview ? "#F6AD55" : "var(--muted)" }}
+            style={{ border: "1px solid var(--stroke)", color: showPreview ? "#0EA5E9" : "var(--muted)" }}
           >
             {showPreview ? <EyeOff size={11} /> : <Eye size={11} />}
             {showPreview ? "Masquer" : "Prévisualiser"}
@@ -170,7 +170,7 @@ export default function TemplateTab({ template, onChange, onContinue }: Props) {
         {showPreview && (
           <div className="sm:w-1/2 flex flex-col min-h-0 flex-1">
             <p className="text-[11px] mb-1.5 flex-shrink-0" style={{ color: "var(--muted)" }}>
-              Aperçu — les <code style={{ color: "#F6AD55" }}>{`{{ variables }}`}</code> restent visibles jusqu'à l'import des données
+              Aperçu — les <code style={{ color: "#0EA5E9" }}>{`{{ variables }}`}</code> restent visibles jusqu'à l'import des données
             </p>
             <iframe
               srcDoc={template}
@@ -186,15 +186,15 @@ export default function TemplateTab({ template, onChange, onContinue }: Props) {
       {/* Variables detected */}
       {variables.length > 0 && (
         <div className="flex-shrink-0 rounded-xl p-3"
-          style={{ background: "rgba(246,173,85,.06)", border: "1px solid rgba(246,173,85,.18)" }}>
-          <p className="text-[11px] mb-2 font-semibold" style={{ color: "#F6AD55" }}>
+          style={{ background: "rgba(14,165,233,.06)", border: "1px solid rgba(14,165,233,.18)" }}>
+          <p className="text-[11px] mb-2 font-semibold" style={{ color: "#0EA5E9" }}>
             Variables détectées
           </p>
           <div className="flex flex-wrap gap-1.5">
             {variables.map((v) => (
               <code key={v}
                 className="rounded-full px-2.5 py-0.5 text-[11px]"
-                style={{ background: "rgba(246,173,85,.14)", color: "#FDE68A", border: "1px solid rgba(246,173,85,.25)" }}
+                style={{ background: "rgba(14,165,233,.14)", color: "#BAE6FD", border: "1px solid rgba(14,165,233,.25)" }}
               >
                 {`{{ ${v} }}`}
               </code>
@@ -209,7 +209,7 @@ export default function TemplateTab({ template, onChange, onContinue }: Props) {
           onClick={onContinue}
           disabled={template.trim().length === 0}
           className="px-5 py-2 rounded-xl text-sm font-semibold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ background: "#F6AD55", color: "#1a0f00" }}
+          style={{ background: "#0EA5E9", color: "#fff" }}
         >
           Importer les données →
         </button>
