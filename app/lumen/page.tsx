@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import LumenTopbar  from "@/components/lumen/LumenTopbar";
 import { DEFAULT_TEMPLATE } from "@/components/lumen/TemplateTab";
+import type { DataRow } from "@/lib/lumen/templateEngine";
 
 const LumenLanding  = dynamic(() => import("@/components/lumen/LumenLanding"),  { ssr: false });
 const LumenGallery  = dynamic(() => import("@/components/lumen/LumenGallery"),  { ssr: false });
@@ -27,7 +28,14 @@ function hashToView(hash: string): View {
 export default function LumenPage() {
   const [view,             setViewState]       = useState<View>("landing");
   const [selectedTemplate, setSelectedTemplate] = useState<string>(DEFAULT_TEMPLATE);
+  const [selectedMapping,  setSelectedMapping]  = useState<Record<string, string>>({});
+  const [selectedFixedValues, setSelectedFixedValues] = useState<Record<string, string>>({});
   const [showProfile,      setShowProfile]      = useState(false);
+
+  // ── Global imported data (persists while browsing gallery) ────────────────
+  const [importedData,    setImportedData]    = useState<DataRow[]>([]);
+  const [importedColumns, setImportedColumns] = useState<string[]>([]);
+  const [dataFilename,    setDataFilename]    = useState("");
 
   // ── Sync view with URL hash ──────────────────────────────────────────────
   useEffect(() => {
@@ -46,10 +54,22 @@ export default function LumenPage() {
     setViewState(newView);
   }, []);
 
-  const openEditor = useCallback((html: string) => {
+  const openEditor = useCallback((
+    html: string,
+    mapping: Record<string, string> = {},
+    fixedValues: Record<string, string> = {},
+  ) => {
     setSelectedTemplate(html);
+    setSelectedMapping(mapping);
+    setSelectedFixedValues(fixedValues);
     navigate("editor");
   }, [navigate]);
+
+  const handleDataImport = useCallback((rows: DataRow[], cols: string[], filename: string) => {
+    setImportedData(rows);
+    setImportedColumns(cols);
+    setDataFilename(filename);
+  }, []);
 
   // ── View rendering ────────────────────────────────────────────────────────
   return (
@@ -72,7 +92,11 @@ export default function LumenPage() {
           {view === "gallery" && (
             <div className="py-6 flex-1 flex flex-col">
               <LumenGallery
-                onUse={(html) => openEditor(html)}
+                importedData={importedData}
+                importedColumns={importedColumns}
+                dataFilename={dataFilename}
+                onDataImport={handleDataImport}
+                onUse={(html, mapping, fixedValues) => openEditor(html, mapping, fixedValues)}
                 onBlank={(_catId) => openEditor(DEFAULT_TEMPLATE)}
                 onBack={() => navigate("landing")}
               />
@@ -83,6 +107,11 @@ export default function LumenPage() {
             <div className="py-6 flex-1 flex flex-col min-h-0">
               <LumenTool
                 initialTemplate={selectedTemplate}
+                initialData={importedData}
+                initialColumns={importedColumns}
+                initialMapping={selectedMapping}
+                initialFixedValues={selectedFixedValues}
+                dataFilename={dataFilename}
                 onBack={() => navigate("gallery")}
               />
             </div>

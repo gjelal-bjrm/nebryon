@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useState } from "react";
 import { Upload, X, ArrowRight } from "lucide-react";
@@ -6,26 +6,29 @@ import { parseFile } from "@/lib/lumen/parseData";
 import type { DataRow } from "@/lib/lumen/templateEngine";
 
 interface Props {
-  variables:    string[];
-  data:         DataRow[];
-  columns:      string[];
-  mapping:      Record<string, string>;   // variable → column
-  onDataChange: (rows: DataRow[], cols: string[]) => void;
-  onMappingChange: (m: Record<string, string>) => void;
-  onBack:       () => void;
-  onContinue:   () => void;
+  variables:          string[];
+  data:               DataRow[];
+  columns:            string[];
+  mapping:            Record<string, string>;   // variable → column
+  fixedValues:        Record<string, string>;   // variable → fixed value
+  initialFilename?:   string;
+  onDataChange:       (rows: DataRow[], cols: string[]) => void;
+  onMappingChange:    (m: Record<string, string>) => void;
+  onFixedValuesChange:(fv: Record<string, string>) => void;
+  onBack:             () => void;
+  onContinue:         () => void;
 }
 
 const ACCEPTED = ".csv,.xlsx,.xls,.json,.xml";
 
 export default function DataTab({
-  variables, data, columns, mapping,
-  onDataChange, onMappingChange, onBack, onContinue,
+  variables, data, columns, mapping, fixedValues, initialFilename,
+  onDataChange, onMappingChange, onFixedValuesChange, onBack, onContinue,
 }: Props) {
   const [dragging, setDragging]  = useState(false);
   const [loading,  setLoading]   = useState(false);
   const [error,    setError]     = useState<string | null>(null);
-  const [filename, setFilename]  = useState<string | null>(null);
+  const [filename, setFilename]  = useState<string | null>(initialFilename ?? null);
 
   const loadFile = useCallback(async (file: File) => {
     setLoading(true);
@@ -44,12 +47,14 @@ export default function DataTab({
         if (match) auto[v] = match;
       }
       onMappingChange(auto);
+      // Clear fixed values when new file loaded (auto-rematch)
+      onFixedValuesChange({});
     } catch (e) {
       setError(String(e));
     } finally {
       setLoading(false);
     }
-  }, [variables, onDataChange, onMappingChange]);
+  }, [variables, onDataChange, onMappingChange, onFixedValuesChange]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -68,9 +73,12 @@ export default function DataTab({
     setError(null);
     onDataChange([], []);
     onMappingChange({});
+    onFixedValuesChange({});
   };
 
-  const canContinue = data.length > 0 && variables.every((v) => mapping[v]);
+  // A variable is "resolved" if it has a column mapping OR a non-empty fixed value
+  const isResolved = (v: string) => !!mapping[v] || !!fixedValues[v]?.trim();
+  const canContinue = data.length > 0 && variables.every(isResolved);
 
   return (
     <div className="flex flex-col gap-4 h-full">
@@ -96,10 +104,12 @@ export default function DataTab({
         ) : filename ? (
           <div className="flex items-center gap-3">
             <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>{filename}</span>
-            <span className="text-[11px] px-2 py-0.5 rounded-full"
-              style={{ background: "rgba(14,165,233,.12)", color: "#0EA5E9", border: "1px solid rgba(14,165,233,.25)" }}>
-              {data.length} ligne{data.length !== 1 ? "s" : ""}
-            </span>
+            {data.length > 0 && (
+              <span className="text-[11px] px-2 py-0.5 rounded-full"
+                style={{ background: "rgba(14,165,233,.12)", color: "#0EA5E9", border: "1px solid rgba(14,165,233,.25)" }}>
+                {data.length} ligne{data.length !== 1 ? "s" : ""}
+              </span>
+            )}
             <button onClick={(e) => { e.stopPropagation(); clearData(); }}
               className="rounded-full p-0.5 transition hover:opacity-70 cursor-pointer"
               style={{ color: "var(--muted)" }}>
@@ -126,36 +136,66 @@ export default function DataTab({
         </p>
       )}
 
-      {/* Mapping */}
+      {/* Mapping + fixed values */}
       {data.length > 0 && variables.length > 0 && (
         <div className="rounded-xl p-4 flex-shrink-0"
           style={{ background: "rgba(255,255,255,.02)", border: "1px solid var(--stroke)" }}>
           <p className="text-xs font-semibold mb-3" style={{ color: "var(--text)" }}>
-            Correspondances colonne → variable
+            Correspondances variable → colonne
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="flex flex-col gap-3">
             {variables.map((v) => (
-              <div key={v} className="flex items-center gap-2">
-                <code className="text-[11px] px-2 py-0.5 rounded-full flex-shrink-0"
-                  style={{ background: "rgba(14,165,233,.14)", color: "#BAE6FD", border: "1px solid rgba(14,165,233,.25)", maxWidth: "140px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {`{{ ${v} }}`}
-                </code>
-                <ArrowRight size={12} style={{ color: "var(--muted)", flexShrink: 0 }} />
-                <select
-                  value={mapping[v] ?? ""}
-                  onChange={(e) => onMappingChange({ ...mapping, [v]: e.target.value })}
-                  className="flex-1 rounded-lg px-2 py-1 text-[11px] cursor-pointer outline-none"
-                  style={{ background: "var(--card-bg)", border: "1px solid var(--stroke)", color: mapping[v] ? "var(--text)" : "var(--muted)" }}
-                >
-                  <option value="">— choisir une colonne —</option>
-                  {columns.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+              <div key={v} className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2">
+                  <code className="text-[11px] px-2 py-0.5 rounded-full flex-shrink-0"
+                    style={{ background: "rgba(14,165,233,.14)", color: "#BAE6FD", border: "1px solid rgba(14,165,233,.25)" }}>
+                    {`{{ ${v} }}`}
+                  </code>
+                  <ArrowRight size={12} style={{ color: "var(--muted)", flexShrink: 0 }} />
+                  <select
+                    value={mapping[v] ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      onMappingChange({ ...mapping, [v]: val });
+                      // Clear fixed value if a column is selected
+                      if (val && fixedValues[v]) {
+                        const fv = { ...fixedValues };
+                        delete fv[v];
+                        onFixedValuesChange(fv);
+                      }
+                    }}
+                    className="flex-1 rounded-lg px-2 py-1 text-[11px] cursor-pointer outline-none"
+                    style={{ background: "var(--card-bg)", border: "1px solid var(--stroke)", color: mapping[v] ? "var(--text)" : "var(--muted)" }}
+                  >
+                    <option value="">— choisir une colonne —</option>
+                    {columns.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+
+                {/* Fixed value fallback when no column selected */}
+                {!mapping[v] && (
+                  <div className="flex items-center gap-2 pl-6">
+                    <span className="text-[10px]" style={{ color: "var(--muted)" }}>ou valeur fixe :</span>
+                    <input
+                      type="text"
+                      placeholder={`valeur identique pour tous (ex: ${v})`}
+                      value={fixedValues[v] ?? ""}
+                      onChange={(e) => onFixedValuesChange({ ...fixedValues, [v]: e.target.value })}
+                      className="flex-1 rounded-lg px-2 py-1 text-[11px] outline-none"
+                      style={{ background: "var(--card-bg)", border: "1px solid var(--stroke)", color: "var(--text)" }}
+                    />
+                    {fixedValues[v]?.trim() && (
+                      <span className="text-[10px]" style={{ color: "#48BB78" }}>✓</span>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
           {!canContinue && data.length > 0 && (
-            <p className="text-[11px] mt-2" style={{ color: "var(--muted)" }}>
-              Mappez toutes les variables pour continuer.
+            <p className="text-[11px] mt-3 rounded-lg px-3 py-2"
+              style={{ background: "rgba(251,191,36,.08)", color: "#fbbf24", border: "1px solid rgba(251,191,36,.2)" }}>
+              Chaque variable doit avoir une colonne correspondante ou une valeur fixe.
             </p>
           )}
         </div>

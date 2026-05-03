@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useState } from "react";
 import { Download, FileText, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
@@ -16,10 +16,11 @@ interface PdfOptions {
 }
 
 interface Props {
-  template:  string;
-  data:      DataRow[];
-  mapping:   Record<string, string>;   // variable → column
-  onBack:    () => void;
+  template:    string;
+  data:        DataRow[];
+  mapping:     Record<string, string>;   // variable → column
+  fixedValues: Record<string, string>;   // variable → fixed value
+  onBack:      () => void;
 }
 
 const MARGIN_PRESETS = [
@@ -29,11 +30,22 @@ const MARGIN_PRESETS = [
   { label: "Aucun",   value: "0mm"  },
 ];
 
-/** Builds a DataRow using the variable→column mapping. */
-function buildRow(raw: DataRow, mapping: Record<string, string>): DataRow {
-  const out: DataRow = {};
+/** Builds a DataRow using the variable→column mapping and fixed values. */
+function buildRow(
+  raw:         DataRow,
+  mapping:     Record<string, string>,
+  fixedValues: Record<string, string>,
+): DataRow {
+  // Start with fixed values as base
+  const out: DataRow = { ...fixedValues };
+  // Then override with actual column values from the data row
   for (const [variable, column] of Object.entries(mapping)) {
-    out[variable] = raw[column] ?? "";
+    const val = raw[column];
+    if (val !== undefined && val !== "") {
+      out[variable] = val;
+    } else if (!(variable in out)) {
+      out[variable] = "";
+    }
   }
   return out;
 }
@@ -52,7 +64,7 @@ async function generatePdf(html: string, opts: PdfOptions): Promise<ArrayBuffer>
   return res.arrayBuffer();
 }
 
-export default function GenerateTab({ template, data, mapping, onBack }: Props) {
+export default function GenerateTab({ template, data, mapping, fixedValues, onBack }: Props) {
   const [opts, setOpts] = useState<PdfOptions>({
     format:       "A4",
     landscape:    false,
@@ -83,16 +95,16 @@ export default function GenerateTab({ template, data, mapping, onBack }: Props) 
     const zip   = new JSZip();
 
     for (let i = 0; i < data.length; i++) {
-      const row      = buildRow(data[i], mapping);
+      const row      = buildRow(data[i], mapping, fixedValues);
       const bodyHtml = renderTemplate(template, row);
       const html     = buildExportHtml(bodyHtml);
       // Label: try common "name" columns for display
       const rowLabel = data[i]["nom_client"] ?? data[i]["nom"] ?? data[i]["name"] ?? `document_${i + 1}`;
-      setLabel(rowLabel);
+      setLabel(String(rowLabel));
 
       try {
         const pdf = await generatePdf(html, opts);
-        const safeName = rowLabel.replace(/[^a-z0-9_\-]/gi, "_");
+        const safeName = String(rowLabel).replace(/[^a-z0-9_\-]/gi, "_");
         zip.file(`${String(i + 1).padStart(4, "0")}_${safeName}.pdf`, pdf);
       } catch (e) {
         setErrMsg(`Erreur sur la ligne ${i + 1} : ${String(e)}`);
@@ -106,7 +118,7 @@ export default function GenerateTab({ template, data, mapping, onBack }: Props) 
     const blob = await zip.generateAsync({ type: "blob" });
     setZipBlob(blob);
     setStatus("done");
-  }, [template, data, mapping, opts]);
+  }, [template, data, mapping, fixedValues, opts]);
 
   const downloadZip = () => {
     if (!zipBlob) return;
@@ -120,8 +132,29 @@ export default function GenerateTab({ template, data, mapping, onBack }: Props) 
 
   const progress = data.length > 0 ? (current / data.length) * 100 : 0;
 
+  // Show fixed values summary if any
+  const fixedEntries = Object.entries(fixedValues);
+
   return (
     <div className="flex flex-col gap-5 h-full">
+
+      {/* Fixed values reminder */}
+      {fixedEntries.length > 0 && (
+        <div className="rounded-xl px-4 py-3 flex-shrink-0"
+          style={{ background: "rgba(14,165,233,.05)", border: "1px solid rgba(14,165,233,.18)" }}>
+          <p className="text-[11px] font-semibold mb-1.5" style={{ color: "#0EA5E9" }}>
+            Valeurs fixes appliquées à tous les documents
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {fixedEntries.map(([k, v]) => (
+              <span key={k} className="text-[10px] px-2 py-0.5 rounded-full"
+                style={{ background: "rgba(14,165,233,.12)", color: "#BAE6FD", border: "1px solid rgba(14,165,233,.25)" }}>
+                <code>{k}</code> = {v}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* PDF options */}
       <div className="rounded-xl p-4 flex-shrink-0"

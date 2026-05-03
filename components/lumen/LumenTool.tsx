@@ -17,17 +17,31 @@ const STEPS = [
 ];
 
 interface Props {
-  initialTemplate?: string;
-  onBack?:          () => void;
+  initialTemplate?:    string;
+  initialData?:        DataRow[];
+  initialColumns?:     string[];
+  initialMapping?:     Record<string, string>;
+  initialFixedValues?: Record<string, string>;
+  dataFilename?:       string;
+  onBack?:             () => void;
 }
 
-export default function LumenTool({ initialTemplate, onBack }: Props) {
-  const [step,     setStep]     = useState<Step>(1);
-  const [template, setTemplate] = useState(initialTemplate ?? "");
-  const [data,     setData]     = useState<DataRow[]>([]);
-  const [columns,  setColumns]  = useState<string[]>([]);
-  const [mapping,  setMapping]  = useState<Record<string, string>>({});
-  const [saveMsg,  setSaveMsg]  = useState("");
+export default function LumenTool({
+  initialTemplate,
+  initialData        = [],
+  initialColumns     = [],
+  initialMapping     = {},
+  initialFixedValues = {},
+  dataFilename       = "",
+  onBack,
+}: Props) {
+  const [step,        setStep]        = useState<Step>(1);
+  const [template,    setTemplate]    = useState(initialTemplate ?? "");
+  const [data,        setData]        = useState<DataRow[]>(initialData);
+  const [columns,     setColumns]     = useState<string[]>(initialColumns);
+  const [mapping,     setMapping]     = useState<Record<string, string>>(initialMapping);
+  const [fixedValues, setFixedValues] = useState<Record<string, string>>(initialFixedValues);
+  const [saveMsg,     setSaveMsg]     = useState("");
 
   const variables = detectVariables(template);
 
@@ -129,8 +143,11 @@ export default function LumenTool({ initialTemplate, onBack }: Props) {
             data={data}
             columns={columns}
             mapping={mapping}
+            fixedValues={fixedValues}
+            initialFilename={dataFilename}
             onDataChange={handleDataChange}
             onMappingChange={setMapping}
+            onFixedValuesChange={setFixedValues}
             onBack={() => setStep(1)}
             onContinue={() => setStep(3)}
           />
@@ -140,6 +157,7 @@ export default function LumenTool({ initialTemplate, onBack }: Props) {
             template={template}
             data={data}
             mapping={mapping}
+            fixedValues={fixedValues}
             onBack={() => setStep(2)}
           />
         )}
