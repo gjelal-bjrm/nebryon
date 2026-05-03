@@ -10,4 +10,5 @@ export const NAV: NavItem[] = [
   { label: "Projets", href: "#projects" },
   { label: "Orbit",   href: "/orbit" },
   { label: "Pulsar",  href: "/pulsar" },
+  { label: "Lumen",   href: "/lumen" },
 ];

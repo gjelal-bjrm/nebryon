@@ -27,6 +27,14 @@ export const projects: Project[] = [
     type: "showcase",
   },
   {
+    title: "Nebryon Lumen",
+    description:
+      "Générateur de documents PDF en masse — concevez un modèle HTML avec des variables dynamiques {{ champ }}, importez vos données (Excel, CSV, JSON, XML) et téléchargez tous vos PDFs dans un ZIP.",
+    href: "/lumen",
+    tags: ["Next.js", "TypeScript", "Puppeteer", "XLSX", "PapaParse"],
+    type: "showcase",
+  },
+  {
     title: "Nebryon Pulsar",
     description:
       "Lecteur et analyseur de données — charge un CSV, Excel, JSON ou XML, explore les données en tableau trié/filtrable, consulte les statistiques par colonne et exporte le résultat.",
