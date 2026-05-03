@@ -196,18 +196,18 @@ export default function DataTab({
 
       {/* Fields matching section */}
       {variables.length > 0 && (
-        <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-auto">
+        <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-auto pr-3">
 
           {/* Status header */}
           <div className="flex items-start gap-3 rounded-xl p-4 flex-shrink-0"
             style={unresolved.length > 0
-              ? { background: "rgba(251,191,36,.06)", border: "1px solid rgba(251,191,36,.2)" }
+              ? { background: "rgba(14,165,233,.06)", border: "1px solid rgba(14,165,233,.2)" }
               : { background: "rgba(72,187,120,.06)", border: "1px solid rgba(72,187,120,.2)" }}>
-            <div className="text-2xl flex-shrink-0">{unresolved.length > 0 ? "⚠️" : "✅"}</div>
+            <div className="text-2xl flex-shrink-0">{unresolved.length > 0 ? "🔧" : "✅"}</div>
             <div className="flex-1 min-w-0">
               {unresolved.length > 0 ? (
                 <>
-                  <p className="text-sm font-semibold mb-0.5" style={{ color: "#fbbf24" }}>
+                  <p className="text-sm font-semibold mb-0.5" style={{ color: "#0EA5E9" }}>
                     {unresolved.length} champ{unresolved.length > 1 ? "s" : ""} à configurer
                   </p>
                   <p className="text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
@@ -230,7 +230,7 @@ export default function DataTab({
             </div>
             {/* Progress */}
             <div className="flex-shrink-0 text-right">
-              <p className="text-xl font-bold" style={{ color: unresolved.length > 0 ? "#fbbf24" : "#48BB78" }}>
+              <p className="text-xl font-bold" style={{ color: unresolved.length > 0 ? "#0EA5E9" : "#48BB78" }}>
                 {totalResolved}/{variables.length}
               </p>
               <p className="text-[10px]" style={{ color: "var(--muted)" }}>configurés</p>
@@ -240,16 +240,16 @@ export default function DataTab({
           {/* ── Fields that NEED action ── */}
           {unresolved.length > 0 && (
             <div className="flex flex-col gap-3 flex-shrink-0">
-              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "#fbbf24" }}>
+              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "#0EA5E9" }}>
                 À configurer ({unresolved.length})
               </p>
               {unresolved.map((v) => (
                 <div key={v} className="rounded-2xl p-4 flex flex-col gap-3"
-                  style={{ border: "1px solid rgba(251,191,36,.3)", background: "rgba(251,191,36,.04)" }}>
+                  style={{ border: "1px solid rgba(14,165,233,.25)", background: "rgba(14,165,233,.04)" }}>
 
                   {/* Field name */}
                   <div className="flex items-center gap-2">
-                    <span className="text-lg">❓</span>
+                    <span className="text-lg">🔷</span>
                     <span className="font-semibold text-sm" style={{ color: "var(--text)" }}>{v}</span>
                     <span className="text-[11px]" style={{ color: "var(--muted)" }}>— champ utilisé dans le modèle</span>
                   </div>
@@ -272,7 +272,7 @@ export default function DataTab({
                           }
                         }}
                         className="w-full rounded-xl px-3 py-2.5 text-sm cursor-pointer outline-none appearance-none pr-8"
-                        style={{ background: "var(--card-bg)", border: "1px solid rgba(251,191,36,.4)", color: mapping[v] ? "var(--text)" : "var(--muted)" }}
+                        style={{ background: "var(--card-bg)", border: "1px solid rgba(14,165,233,.35)", color: mapping[v] ? "var(--text)" : "var(--muted)" }}
                       >
                         <option value="">— Sélectionner une colonne —</option>
                         {columns.map((c) => (

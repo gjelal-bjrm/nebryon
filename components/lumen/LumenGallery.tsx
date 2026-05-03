@@ -159,7 +159,7 @@ export default function LumenGallery({
     }
     return (
       <span className="text-[10px] px-1.5 py-0.5 rounded-full"
-        style={{ background: "rgba(251,191,36,.12)", color: "#fbbf24", border: "1px solid rgba(251,191,36,.25)" }}>
+        style={{ background: "rgba(14,165,233,.12)", color: "#0EA5E9", border: "1px solid rgba(14,165,233,.25)" }}>
         ⚠ {missing.length} champ{missing.length > 1 ? "s" : ""} manquant{missing.length > 1 ? "s" : ""}
       </span>
     );
@@ -244,7 +244,7 @@ export default function LumenGallery({
                         <span className="text-[11px] px-2 py-0.5 rounded-full"
                           style={compatible === cat.presets.length
                             ? { background: "rgba(72,187,120,.1)", color: "#48BB78", border: "1px solid rgba(72,187,120,.2)" }
-                            : { background: "rgba(251,191,36,.1)", color: "#fbbf24", border: "1px solid rgba(251,191,36,.2)" }}>
+                            : { background: "rgba(14,165,233,.1)", color: "#0EA5E9", border: "1px solid rgba(14,165,233,.2)" }}>
                           {compatible === cat.presets.length ? "✓ Tous compatibles" : `${compatible}/${cat.presets.length} compatibles`}
                         </span>
                       )}
@@ -358,7 +358,7 @@ export default function LumenGallery({
                     return (
                       <span key={f} className="text-[10px] px-1.5 py-0.5 rounded"
                         style={isMissing
-                          ? { background: "rgba(251,191,36,.1)", color: "#fbbf24", border: "1px solid rgba(251,191,36,.25)" }
+                          ? { background: "rgba(14,165,233,.1)", color: "#0EA5E9", border: "1px solid rgba(14,165,233,.25)" }
                           : { background: "rgba(255,255,255,.05)", color: "var(--muted)", border: "1px solid var(--stroke)" }}>
                         {f}
                       </span>

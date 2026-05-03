@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { AlertTriangle, X, Check, ChevronDown, ChevronUp } from "lucide-react";
+import { Settings2, X, Check, ChevronDown, ChevronUp } from "lucide-react";
 import type { LumenPreset } from "@/lib/lumen/presets";
 
 interface Props {
@@ -54,8 +54,8 @@ export default function FieldMappingModal({ preset, importedColumns, onConfirm, 
         <div className="flex items-start gap-3 p-4 flex-shrink-0"
           style={{ borderBottom: "1px solid var(--stroke)" }}>
           <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: "rgba(251,191,36,.15)" }}>
-            <AlertTriangle size={15} style={{ color: "#fbbf24" }} />
+            style={{ background: "rgba(14,165,233,.15)" }}>
+            <Settings2 size={15} style={{ color: "#0EA5E9" }} />
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-sm" style={{ color: "var(--text)" }}>
@@ -164,7 +164,7 @@ export default function FieldMappingModal({ preset, importedColumns, onConfirm, 
 
           {unmapped.length > 0 && !canConfirm && (
             <p className="text-[11px] rounded-lg px-3 py-2"
-              style={{ background: "rgba(251,191,36,.08)", color: "#fbbf24", border: "1px solid rgba(251,191,36,.2)" }}>
+              style={{ background: "rgba(14,165,233,.08)", color: "#0EA5E9", border: "1px solid rgba(14,165,233,.2)" }}>
               Tous les champs doivent avoir une correspondance ou une valeur fixe pour continuer.
             </p>
           )}
