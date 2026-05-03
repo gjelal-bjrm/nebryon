@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import LumenTopbar  from "@/components/lumen/LumenTopbar";
 import { DEFAULT_TEMPLATE } from "@/components/lumen/TemplateTab";
@@ -12,16 +12,46 @@ const ProfileEditor = dynamic(() => import("@/components/orbit/ProfileEditor"), 
 
 type View = "landing" | "gallery" | "editor";
 
+function viewToHash(v: View): string {
+  if (v === "gallery") return "#gallery";
+  if (v === "editor")  return "#editor";
+  return "";
+}
+
+function hashToView(hash: string): View {
+  if (hash === "#gallery") return "gallery";
+  if (hash === "#editor")  return "editor";
+  return "landing";
+}
+
 export default function LumenPage() {
-  const [view,            setView]            = useState<View>("landing");
+  const [view,             setViewState]       = useState<View>("landing");
   const [selectedTemplate, setSelectedTemplate] = useState<string>(DEFAULT_TEMPLATE);
-  const [showProfile,     setShowProfile]     = useState(false);
+  const [showProfile,      setShowProfile]      = useState(false);
 
-  const openEditor = (html: string) => {
+  // ── Sync view with URL hash ──────────────────────────────────────────────
+  useEffect(() => {
+    setViewState(hashToView(window.location.hash));
+  }, []);
+
+  useEffect(() => {
+    const handlePop = () => setViewState(hashToView(window.location.hash));
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, []);
+
+  const navigate = useCallback((newView: View) => {
+    const hash = viewToHash(newView);
+    window.history.pushState({ view: newView }, "", `/lumen${hash}`);
+    setViewState(newView);
+  }, []);
+
+  const openEditor = useCallback((html: string) => {
     setSelectedTemplate(html);
-    setView("editor");
-  };
+    navigate("editor");
+  }, [navigate]);
 
+  // ── View rendering ────────────────────────────────────────────────────────
   return (
     <div
       className="flex flex-col h-screen overflow-hidden"
@@ -34,7 +64,7 @@ export default function LumenPage() {
 
           {view === "landing" && (
             <LumenLanding
-              onStart={() => setView("gallery")}
+              onStart={() => navigate("gallery")}
               onBlank={() => openEditor(DEFAULT_TEMPLATE)}
             />
           )}
@@ -43,8 +73,8 @@ export default function LumenPage() {
             <div className="py-6 flex-1 flex flex-col">
               <LumenGallery
                 onUse={(html) => openEditor(html)}
-                onBlank={() => openEditor(DEFAULT_TEMPLATE)}
-                onBack={() => setView("landing")}
+                onBlank={(_catId) => openEditor(DEFAULT_TEMPLATE)}
+                onBack={() => navigate("landing")}
               />
             </div>
           )}
@@ -53,7 +83,7 @@ export default function LumenPage() {
             <div className="py-6 flex-1 flex flex-col min-h-0">
               <LumenTool
                 initialTemplate={selectedTemplate}
-                onBack={() => setView("gallery")}
+                onBack={() => navigate("gallery")}
               />
             </div>
           )}

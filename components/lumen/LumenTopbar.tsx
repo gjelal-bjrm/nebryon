@@ -71,7 +71,7 @@ export default function LumenTopbar({ onOpenProfile }: Props) {
               <a key={item.href} href={href}
                 className="flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold transition"
                 style={isCurrent
-                  ? { border: "1px solid #0EA5E9", background: "rgba(14,165,233,.1)", color: "#BAE6FD" }
+                  ? { border: "1px solid #0EA5E9", background: "rgba(14,165,233,.1)", color: theme === "dark" ? "#BAE6FD" : "#0369A1" }
                   : { border: "1px solid var(--stroke)", background: "rgba(14,165,233,.06)", color: "var(--muted)" }}
               >
                 {item.label}

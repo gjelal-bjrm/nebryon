@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { Download, FileText, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { renderTemplate } from "@/lib/lumen/templateEngine";
 import type { DataRow } from "@/lib/lumen/templateEngine";
+import { buildExportHtml } from "./editor/WysiwygEditor";
 
 interface PdfOptions {
   format:       "A4" | "Letter" | "Legal";
@@ -83,7 +84,8 @@ export default function GenerateTab({ template, data, mapping, onBack }: Props) 
 
     for (let i = 0; i < data.length; i++) {
       const row      = buildRow(data[i], mapping);
-      const html     = renderTemplate(template, row);
+      const bodyHtml = renderTemplate(template, row);
+      const html     = buildExportHtml(bodyHtml);
       // Label: try common "name" columns for display
       const rowLabel = data[i]["nom_client"] ?? data[i]["nom"] ?? data[i]["name"] ?? `document_${i + 1}`;
       setLabel(rowLabel);
